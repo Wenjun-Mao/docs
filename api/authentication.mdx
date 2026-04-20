@@ -1,0 +1,56 @@
+---
+title: "API authentication in Letta Open ADE"
+description: "The Agent Platform API runs locally and does not require authentication tokens. Learn how to connect and what the CORS policy covers."
+---
+
+The Agent Platform API is designed for local development and private network use. It does not enforce authentication tokens, API keys, or session credentials on any of its endpoints. You connect to it directly by sending HTTP requests to `http://127.0.0.1:8284/api/v1/`.
+
+## No authentication required
+
+All endpoints accept requests without any `Authorization` header or token. This design choice keeps local development fast and friction-free — the ADE frontend can call the API from any browser context without managing credentials.
+
+## CORS policy
+
+The API allows cross-origin requests from any origin. This means the ADE browser frontend — served on any local port such as `http://localhost:3000` — can call the API directly without any preflight configuration on your side.
+
+## Connecting from the command line
+
+Because there is no authentication, you can send requests with plain `curl` or any HTTP client:
+
+```bash
+curl http://127.0.0.1:8284/api/v1/agents
+```
+
+## Exposing the API beyond localhost
+
+If you need to access the API from another machine on your local network or from a remote host, place a reverse proxy (such as nginx or Caddy) in front of the API and add an authentication layer there. Options include:
+
+- HTTP Basic Auth via the proxy
+- Bearer token validation middleware
+- mTLS between the client and the proxy
+
+<Note>
+Do not expose the API on a public network without a reverse proxy and authentication layer. The open CORS policy and lack of token validation mean that any client with network access can read agent data and send messages.
+</Note>
+
+## Disabling the Platform API entirely
+
+You can disable the entire API surface by setting the `AGENT_PLATFORM_API_ENABLED` environment variable to a falsy value in your `.env` file before starting the stack:
+
+```bash
+AGENT_PLATFORM_API_ENABLED=0
+```
+
+When disabled, every request to any `/api/v1/` endpoint returns `503 Service Unavailable`:
+
+```json
+{
+  "detail": "Agent Platform API is disabled by AGENT_PLATFORM_API_ENABLED."
+}
+```
+
+Truthy values that enable the API: `1`, `true`, `yes`, `on`. Any other value (including an empty string or unset variable) falls back to enabled.
+
+## Letta server authentication
+
+The ADE API proxies agent operations through to a Letta server running on port `8283` (configurable via `LETTA_BASE_URL`). The Letta server manages its own authentication separately. The ADE API uses the Letta Python SDK to communicate with the Letta server — if your Letta server requires a token, configure it in the SDK or environment as required by the Letta server setup, not by the ADE API itself.

@@ -1,0 +1,107 @@
+---
+title: "Test Center: run and monitor agent test suites"
+description: "Use Test Center to orchestrate backend validation checks and persona guardrail runners, then monitor run status and download artifacts."
+---
+
+Test Center is the UI for triggering and monitoring orchestrated backend test runs in Letta Open ADE. You can create runs that exercise the full agent lifecycle, validate provider configurations, or run multi-round persona guardrail checks — all without leaving the browser. Test Center polls for status updates automatically and lets you cancel runs, inspect log tails, and read artifact content inline.
+
+## Available run types
+
+When you create a run you choose from the following run types. Each maps to a specific backend validation workload.
+
+| Run type | Description |
+|---|---|
+| `agent_bootstrap_check` | Verifies that agents can be created and initialized correctly with the current server configuration. |
+| `provider_embedding_matrix_check` | Validates that all configured model and embedding provider combinations respond as expected. |
+| `prompt_strategy_check` | Tests the configured prompt strategies (`custom_v1`, `custom_v2`) for correct behavior. |
+| `platform_api_e2e_check` | Runs a full end-to-end check of the platform control and runtime API surface. |
+| `ade_mvp_smoke_e2e_check` | ADE MVP smoke suite — covers the critical happy-path flows used as the release-readiness gate. |
+| `platform_flag_gate_check` | Validates that environment flag gates behave correctly under various configurations. |
+| `platform_dual_run_gate` | Runs the same scenario against two model configurations and compares outputs. |
+| `persona_guardrail_runner` | Multi-round runner that evaluates persona adherence and guardrail compliance. |
+| `memory_update_runner` | Multi-round runner that exercises memory block read/write behavior. |
+
+## Creating a run
+
+<Steps>
+  <Step title="Choose a run type">
+    Select from the **Run type** dropdown. The default is `platform_api_e2e_check`.
+  </Step>
+  <Step title="Set run configuration (optional)">
+    Fill in any optional fields that apply to your chosen run type:
+
+    | Field | Description |
+    |---|---|
+    | Model | Model handle to use for the run. Leave blank to use the server default. |
+    | Embedding | Embedding handle to use for the run. Leave blank to use the server default. |
+    | Rounds | Number of turns or iterations for runner-type checks (for example `persona_guardrail_runner`, `memory_update_runner`). Defaults to `10`. |
+    | Config path | Path to a test configuration file. Defaults to `tests/configs/suites/lmstudio_custom_v2.json`. |
+
+  </Step>
+  <Step title="Submit the run">
+    Click **Create Run**. The new run appears in the **Runs** dropdown and is selected automatically.
+  </Step>
+</Steps>
+
+## Run lifecycle
+
+A run moves through the following states after creation:
+
+| Status | Description |
+|---|---|
+| `created` | Run record exists; the backend process has not started yet. |
+| `started` | Backend process is running. |
+| `finished` | Process has exited. Check `exit_code` to determine success or failure. |
+| `cancelled` | A cancel was requested and the process was terminated. |
+
+Test Center polls the run list and the selected run every 4 seconds while the page is open, so status updates appear without manual refreshing.
+
+## Monitoring run status
+
+Select a run from the **Runs** dropdown to see its current state. The run record JSON block shows the full `ApiTestRunRecordResponse` payload, including:
+
+| Field | Description |
+|---|---|
+| `run_id` | Unique identifier for the run. |
+| `run_type` | The type you selected when creating the run. |
+| `status` | Current lifecycle status. |
+| `exit_code` | Process exit code. `0` indicates success; any other value indicates failure. `null` while still running. |
+| `output_tail` | Last few lines of log output from the backend process. |
+| `error` | Error message if the run failed to start or encountered a fatal error. |
+| `cancel_requested` | Whether a cancel has been requested. |
+
+The **Run Output Tail** card below the run record shows the `output_tail` lines in a readable code block when they are available.
+
+### Cancelling a run
+
+Click **Cancel Run** to send a cancel request to the backend. The run status will transition to `cancelled` after the backend process is terminated. You can only cancel a run that has been selected in the dropdown.
+
+## Artifacts
+
+Each run can produce artifacts — log files, summary reports, and other outputs written by the backend process. The **Artifacts** panel lists all discovered artifacts for the selected run.
+
+| Column | Description |
+|---|---|
+| ID | Artifact identifier |
+| Type | Artifact category (for example `log`, `summary`) |
+| Exists | Whether the file is present on disk |
+| Action | **Open** button to read the artifact content |
+
+Click **Open** next to any artifact to load its content into the artifact viewer. The backend returns up to 250 lines by default. A `truncated` flag in the response indicates whether the file was cut off.
+
+<Note>
+  Artifact files are written to the backend host filesystem. If the backend process did not complete or was cancelled before writing artifacts, the **Exists** column will show `no`.
+</Note>
+
+## Quality gate interpretation
+
+The two run types that form the release-readiness signal are:
+
+- `platform_api_e2e_check` — backend end-to-end coverage
+- `ade_mvp_smoke_e2e_check` — ADE MVP smoke suite
+
+Both must complete with `exit_code: 0` before a build is considered release-ready. The ADE dashboard home page displays this signal as the **Quality Gate** status.
+
+<Tip>
+  Run `ade_mvp_smoke_e2e_check` first for a fast signal. If it passes, run `platform_api_e2e_check` for full coverage before marking a release green.
+</Tip>

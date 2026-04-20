@@ -1,0 +1,122 @@
+---
+title: "POST /api/v1/agents — create a new agent"
+description: "POST /api/v1/agents creates a Letta agent with your chosen model, system prompt, and embedding. Returns the agent ID and configuration."
+---
+
+The create agent endpoint provisions a new Letta agent with the model, system prompt, and optional embedding you specify. The agent is initialized with default memory blocks (persona and human template), a 16 384-token context window, and the Asia/Shanghai timezone. On success the endpoint returns the new agent's ID and resolved configuration.
+
+## Endpoint
+
+```
+POST /api/v1/agents
+```
+
+## Request body
+
+<ParamField body="name" type="string" default="dev-agent">
+  Display name for the new agent. Does not need to be unique.
+</ParamField>
+
+<ParamField body="model" type="string" required>
+  Model handle to assign to the agent. Must be a key present in the list returned by `GET /api/v1/options`. Examples:
+
+  - `lmstudio_openai/qwen3.5-27b`
+  - `lmstudio_openai/qwen/qwen3.5-35b-a3b`
+  - `openai-proxy/doubao-seed-1-8-251228`
+
+  An empty string or a handle not found in the options list results in a `400` error.
+</ParamField>
+
+<ParamField body="prompt_key" type="string" default="custom_v2">
+  Key of the system prompt to use. Accepted values:
+
+  - `custom_v2` — recommended baseline for persona adherence and tool-flow behavior.
+  - `custom_v1` — alternate baseline kept for A/B testing and regression comparison.
+
+  Any other value results in a `400` error.
+</ParamField>
+
+<ParamField body="embedding" type="string">
+  Embedding handle to assign to the agent. Must be a key present in the embeddings list from `GET /api/v1/options`. Omit this field to let the Letta server choose the default embedding.
+</ParamField>
+
+## Validation
+
+The API validates your request against the options currently available on the connected Letta server before forwarding the create call:
+
+- `model` must not be empty.
+- `model` must match a key in the current model options list.
+- `prompt_key` must be `custom_v1` or `custom_v2`.
+- `embedding`, if provided, must match a key in the current embedding options list.
+
+All validation failures return `400 Bad Request` with a descriptive `detail` message.
+
+## Default agent configuration
+
+Every agent created through this endpoint is initialized with the following fixed settings:
+
+| Setting | Value |
+|---------|-------|
+| Memory block — `persona` | `linxiaotang` persona text |
+| Memory block — `human` | Human template text |
+| `context_window_limit` | `16384` |
+| `timezone` | `Asia/Shanghai` |
+
+## Response
+
+<ResponseField name="id" type="string" required>
+  Letta UUID assigned to the new agent.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Display name of the agent as stored by Letta.
+</ResponseField>
+
+<ResponseField name="model" type="string" required>
+  Model handle the agent was created with.
+</ResponseField>
+
+<ResponseField name="embedding" type="string">
+  Embedding handle provided in the request. `null` if no embedding was specified.
+</ResponseField>
+
+<ResponseField name="prompt_key" type="string" required>
+  The system prompt key used during creation (`custom_v1` or `custom_v2`).
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```bash Request
+curl -X POST http://127.0.0.1:8284/api/v1/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-agent",
+    "model": "lmstudio_openai/qwen3.5-27b",
+    "prompt_key": "custom_v2",
+    "embedding": "lmstudio_openai/text-embedding-qwen3-embedding-0.6b"
+  }'
+```
+
+```json Response
+{
+  "id": "agent-uuid-a1b2c3",
+  "name": "my-agent",
+  "model": "lmstudio_openai/qwen3.5-27b",
+  "embedding": "lmstudio_openai/text-embedding-qwen3-embedding-0.6b",
+  "prompt_key": "custom_v2"
+}
+```
+
+</CodeGroup>
+
+## Error responses
+
+| Condition | Status | Example detail |
+|-----------|--------|----------------|
+| `model` is empty | `400` | `"Model is required. Please choose one."` |
+| `model` not in options list | `400` | `"Invalid model: unknown/handle"` |
+| `prompt_key` not valid | `400` | `"Invalid prompt key: custom_v3"` |
+| `embedding` not in options list | `400` | `"Invalid embedding handle: unknown/embed"` |
+| Model handle not registered on Letta server | `400` | `"Handle ... not found. This handle is not registered on the current Letta server."` |

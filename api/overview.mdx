@@ -1,0 +1,94 @@
+---
+title: "Agent Platform API overview and base URLs"
+description: "The Agent Platform API is a local REST service for managing Letta agents, sending messages, running platform checks, and inspecting agent state."
+---
+
+The Agent Platform API is a local REST service that the ADE frontend and backend tooling use to manage Letta agents, send messages, and run platform diagnostics. All endpoints live under a single versioned prefix and return JSON. The server runs as the `dev_ui` FastAPI application and binds to `http://127.0.0.1:8284` by default.
+
+## Base URL
+
+```
+http://127.0.0.1:8284
+```
+
+All API routes are versioned under `/api/v1/`. The full prefix for every endpoint described in this reference is:
+
+```
+http://127.0.0.1:8284/api/v1/
+```
+
+## OpenAPI spec
+
+A machine-readable OpenAPI specification is served at runtime:
+
+```
+http://127.0.0.1:8284/openapi.json
+```
+
+You can import this URL into any OpenAPI-compatible client such as Insomnia, Postman, or Bruno to explore and test endpoints interactively.
+
+## Response format
+
+Every endpoint returns JSON. Successful responses follow the shape documented in each endpoint's response model. The API uses standard HTTP status codes:
+
+| Status | Meaning |
+|--------|---------|
+| `200`  | Request succeeded. |
+| `400`  | Bad request — invalid parameters or validation failure. |
+| `404`  | Resource not found (agent ID, run ID, artifact ID). |
+| `503`  | Platform API disabled via `AGENT_PLATFORM_API_ENABLED`. |
+
+## CORS policy
+
+CORS is enabled for all origins in development mode (`allow_origins=["*"]`). This allows the ADE browser frontend served on any local port to call the API directly. Do not expose this configuration on a public network.
+
+## Platform API enable flag
+
+All endpoints check the `AGENT_PLATFORM_API_ENABLED` environment variable before processing any request. The variable defaults to enabled (`1`). If you set it to a falsy value (`0`, `false`, `no`, `off`), every endpoint returns `503 Service Unavailable` with the message:
+
+```
+Agent Platform API is disabled by AGENT_PLATFORM_API_ENABLED.
+```
+
+## Endpoint groups
+
+The API is organized into the following groups:
+
+### Options — `GET /api/v1/options`
+
+Returns the list of available LLM models, embedding handles, and system prompts, along with the current defaults. The UI uses this endpoint to populate model and prompt selectors when creating a new agent. Results are cached for 30 seconds (configurable via `AGENT_PLATFORM_OPTIONS_CACHE_TTL_SECONDS`).
+
+### Agents — `GET /api/v1/agents` and `POST /api/v1/agents`
+
+List all agents ordered by last update time, or create a new agent with your chosen model, system prompt, and embedding configuration.
+
+### Agent details — `GET /api/v1/agents/:id/...`
+
+Per-agent sub-routes for retrieving full configuration details, persistent backend state (memory blocks, conversation history, attached tools), and the raw prompt message log.
+
+| Route | Description |
+|-------|-------------|
+| `GET /api/v1/agents/{agent_id}/details` | Full agent config including LLM config, tools, memory, and system prompt. |
+| `GET /api/v1/agents/{agent_id}/persistent_state` | Persisted state from Letta backend storage: agent summary, memory blocks, tools, conversation history. |
+| `GET /api/v1/agents/{agent_id}/raw_prompt` | The 10 most recent raw prompt messages for the agent. |
+
+### Chat — `POST /api/v1/chat`
+
+Send a user message to a Letta agent and receive the full response sequence, including assistant replies, tool calls, tool returns, and reasoning steps. Datetime keywords in the message trigger automatic injection of a runtime datetime hint in the Asia/Shanghai timezone.
+
+### Platform API — `/api/v1/platform/...`
+
+A collection of endpoints for advanced platform management. Requires the Platform API to be enabled.
+
+| Route prefix | Description |
+|---|---|
+| `GET /api/v1/platform/capabilities` | Platform capability matrix — which runtime and control features are active. |
+| `POST /api/v1/platform/agents/{agent_id}/messages` | Send a runtime message with optional per-request model and system overrides. |
+| `PATCH /api/v1/platform/agents/{agent_id}/system` | Update the persisted system prompt for an agent. |
+| `PATCH /api/v1/platform/agents/{agent_id}/model` | Update the persisted model for an agent. |
+| `PATCH /api/v1/platform/agents/{agent_id}/core-memory/blocks/{block_label}` | Update a core memory block value. |
+| `GET /api/v1/platform/tools` | List available tools for Toolbench discovery. |
+| `POST /api/v1/platform/tools/test-invoke` | Invoke a runtime message and validate which tool the agent calls. |
+| `GET/POST /api/v1/platform/test-runs` | List and create orchestrated test runs. |
+| `GET /api/v1/platform/metadata/prompts-personas` | Prompt and persona metadata including previews and lengths. |
+| `GET /api/v1/platform/metadata/prompts-personas/revisions` | Prompt and persona revision history timeline. |

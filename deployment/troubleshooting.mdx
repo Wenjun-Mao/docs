@@ -1,0 +1,107 @@
+---
+title: "Troubleshoot Letta Open ADE deployment issues"
+description: "Diagnose and fix common Letta Open ADE startup and runtime problems including slow starts, connection resets, and cold-start delays."
+---
+
+Most deployment problems fall into one of a few categories: services that are not yet healthy when you test them, network connectivity issues, startup delays from missing data, or misconfigured model handles. The accordion items below cover the most common issues and their fixes.
+
+<AccordionGroup>
+  <Accordion title="curl to port 8283 connects then resets">
+    **Symptom:** `curl http://127.0.0.1:8283/openapi.json` establishes a connection but immediately resets or returns an empty response.
+
+    **Most likely cause:** You tested the endpoint before `letta_server` finished starting up. The Letta server has a 180-second start period and will not respond correctly to API requests until it is fully initialized.
+
+    **What to check:**
+
+    ```bash
+    docker compose ps
+    docker compose logs --tail=200 letta_server
+    ```
+
+    Wait until `docker compose ps` shows `letta_server` as `healthy` before making API requests. If logs show errors rather than a clean startup sequence, look for database connection failures or NLTK download stalls (see the NLTK issue below).
+  </Accordion>
+
+  <Accordion title="Startup stalls at 'Checking NLTK data availability...'">
+    **Symptom:** `letta_server` logs stop progressing at `Checking NLTK data availability...` and the service never becomes healthy.
+
+    **Root cause:** Letta calls `nltk.download("punkt_tab")` during startup. In environments with no outbound internet access, this download attempt hangs rather than failing immediately, blocking the rest of startup.
+
+    **Fix:** Pre-seed the NLTK data on the host once, then force-recreate the server:
+
+    ```bash
+    chmod +x scripts/seed_nltk_data.sh
+    ./scripts/seed_nltk_data.sh
+    docker compose up -d --force-recreate letta_server
+    ```
+
+    The stack mounts `./data/nltk_data` into the Letta container. When `LETTA_NLTK_STRICT_LOCAL=true` is set, the server uses local `punkt_tab` data and skips the network download entirely.
+
+    <Note>
+    You only need to run `seed_nltk_data.sh` once. The data persists in `./data/nltk_data` and is reused on subsequent restarts.
+    </Note>
+  </Accordion>
+
+  <Accordion title="dev_ui starts slowly — shows 'Creating virtual environment' or 'Downloading pydantic-core'">
+    **Symptom:** `dev_ui` logs show lines like `Creating virtual environment at: /opt/venv` or `Downloading pydantic-core` and takes several minutes to become available.
+
+    **Root cause:** You are running an older `dev_ui` image that runs `uv` at container startup to install dependencies on first boot, instead of using a prebuilt image with dependencies already installed.
+
+    **Fix:** Pull the latest prebuilt image and recreate the service:
+
+    ```bash
+    docker compose pull dev_ui
+    docker compose up -d --force-recreate dev_ui
+    ```
+
+    After this, `dev_ui` should start directly with Uvicorn and produce no startup-time package download lines.
+  </Accordion>
+
+  <Accordion title="'Handle not found' error when creating an agent">
+    **Symptom:** Creating an agent through the ADE UI or API returns an error like `Handle not found` or `model handle not recognized`.
+
+    **Root cause:** The `letta_server` does not see the model handle you specified. This happens when:
+
+    - `OPENAI_API_BASE` or `LMSTUDIO_BASE_URL` is not set, preventing Letta from discovering models
+    - The handle string uses the wrong provider prefix
+    - The model ID in the handle does not exactly match what the backend returns from `/models`
+
+    **What to check:**
+
+    First, verify the models Letta has discovered:
+
+    ```bash
+    curl http://127.0.0.1:8283/v1/models/
+    ```
+
+    Confirm your intended handle appears in the response. If the list is empty or missing your model, check that your `.env` sets the correct base URL and that `letta_server` was restarted after you last edited `.env`.
+
+    For Doubao specifically: the correct handle prefix is `openai-proxy/`, not `openai/`. For example:
+
+    ```
+    # Correct
+    openai-proxy/doubao-seed-1-8-251228
+
+    # Wrong — will not be found
+    openai/doubao-seed-1-8-251228
+    ```
+
+    See [Connect LLM and embedding backends](/deployment/llm-backends) for the full list of environment variables.
+  </Accordion>
+
+  <Accordion title="ade_frontend container does not start">
+    **Symptom:** `ade_frontend` exits immediately or shows an error on startup.
+
+    **Most likely cause:** `dev_ui` is not healthy yet. `ade_frontend` depends on `dev_ui` being available because the Next.js frontend connects to the Agent Platform API at startup.
+
+    **What to check:**
+
+    ```bash
+    docker compose ps
+    docker compose logs --tail=100 ade_frontend
+    ```
+
+    Check that `dev_ui` shows as `running` before investigating `ade_frontend` logs. If `dev_ui` itself is unhealthy, resolve that first (see the `dev_ui` cold-start issue above).
+
+    If `dev_ui` is healthy but `ade_frontend` still fails, the logs will indicate whether it is a build error, a missing environment variable, or a network connectivity issue between the containers.
+  </Accordion>
+</AccordionGroup>

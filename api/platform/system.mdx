@@ -1,0 +1,69 @@
+---
+title: "PATCH system prompt for a Letta agent"
+description: "PATCH /api/v1/platform/agents/:id/system replaces an agent's persisted system prompt and records a before/after revision entry in the history log."
+---
+
+Use this endpoint to replace the persisted system prompt for a Letta agent. The update writes directly to Letta backend storage, so all subsequent messages the agent processes will use the new prompt. A revision record capturing the before and after text is appended to `diagnostics/prompt_persona_revisions.jsonl` whenever the new value differs from the previous one.
+
+## Endpoint
+
+```
+PATCH /api/v1/platform/agents/{agent_id}/system
+```
+
+## Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The ID of the agent whose system prompt you want to update.
+</ParamField>
+
+## Request body
+
+<ParamField body="system" type="string" required>
+  The new system prompt text. Cannot be empty or whitespace-only.
+</ParamField>
+
+## Response
+
+<ResponseField name="agent_id" type="string">
+  The ID of the agent that was updated.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The current LLM model handle for this agent, unchanged by this operation.
+</ResponseField>
+
+<ResponseField name="system_before" type="string">
+  The full system prompt text that was in place before this update.
+</ResponseField>
+
+<ResponseField name="system_after" type="string">
+  The new system prompt text now stored for this agent.
+</ResponseField>
+
+## Side effects
+
+After a successful update, a revision entry is appended to `diagnostics/prompt_persona_revisions.jsonl` at the project root. Each entry includes a `revision_id`, `recorded_at` timestamp, `field` set to `"system"`, and both `before`/`after` previews. Revision logging failures are swallowed so they never block the primary mutation.
+
+## Example
+
+<CodeGroup>
+
+```bash curl
+curl -X PATCH http://127.0.0.1:8284/api/v1/platform/agents/agent-abc123/system \
+  -H "Content-Type: application/json" \
+  -d '{
+    "system": "You are a helpful assistant. Always respond in concise, plain language."
+  }'
+```
+
+</CodeGroup>
+
+```json response
+{
+  "agent_id": "agent-abc123",
+  "model": "lmstudio_openai/qwen3.5-27b",
+  "system_before": "You are a helpful assistant.",
+  "system_after": "You are a helpful assistant. Always respond in concise, plain language."
+}
+```

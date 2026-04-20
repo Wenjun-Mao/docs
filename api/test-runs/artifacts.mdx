@@ -1,0 +1,209 @@
+---
+title: "Read test run artifacts from the Platform API"
+description: "GET /api/v1/platform/test-runs/{id}/artifacts lists log and summary files produced by a test run. Read artifact content with configurable line limits."
+---
+
+Each test run produces one or more artifacts — log files and summary files written to disk by the runner subprocess. The artifacts API lets you enumerate what a run produced and read artifact content directly through the Platform API, without needing filesystem access.
+
+---
+
+## Artifact types
+
+| Type | Description |
+|---|---|
+| `logs` | Full subprocess output captured to a `.log` file |
+| `summaries` | Structured summary files written by the runner (e.g. JSON or JSONL) |
+
+---
+
+## List artifacts for a run
+
+```
+GET /api/v1/platform/test-runs/{run_id}/artifacts
+```
+
+Returns all artifact records associated with a test run. An artifact record includes metadata about the file, but not its content. Use the read endpoint to fetch content.
+
+### Path parameters
+
+<ParamField path="run_id" type="string" required>
+  The ID of the run whose artifacts you want to list.
+</ParamField>
+
+### Response
+
+<ResponseField name="run_id" type="string">
+  The ID of the run these artifacts belong to.
+</ResponseField>
+
+<ResponseField name="items" type="object[]">
+  List of artifact records for this run.
+
+  <Expandable title="properties">
+    <ResponseField name="artifact_id" type="string">
+      Unique identifier for this artifact within the run.
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Artifact type: `logs` or `summaries`.
+    </ResponseField>
+    <ResponseField name="path" type="string">
+      Filesystem path to the artifact file.
+    </ResponseField>
+    <ResponseField name="exists" type="boolean">
+      Whether the file currently exists on disk. A run may declare an artifact before the subprocess writes it.
+    </ResponseField>
+    <ResponseField name="size_bytes" type="integer">
+      Size of the artifact file in bytes. `0` if the file does not exist yet.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash curl
+curl http://127.0.0.1:8284/api/v1/platform/test-runs/run-e2e-001/artifacts
+```
+
+</CodeGroup>
+
+```json response
+{
+  "run_id": "run-e2e-001",
+  "items": [
+    {
+      "artifact_id": "log",
+      "type": "logs",
+      "path": "diagnostics/test-runs/run-e2e-001.log",
+      "exists": true,
+      "size_bytes": 8192
+    },
+    {
+      "artifact_id": "summary",
+      "type": "summaries",
+      "path": "diagnostics/test-runs/run-e2e-001-summary.json",
+      "exists": true,
+      "size_bytes": 512
+    }
+  ]
+}
+```
+
+---
+
+## Read artifact content
+
+```
+GET /api/v1/platform/test-runs/{run_id}/artifacts/{artifact_id}
+```
+
+Returns the text content of a specific artifact file. By default the response is limited to the last 400 lines. Increase `max_lines` to retrieve more of a large log file.
+
+### Path parameters
+
+<ParamField path="run_id" type="string" required>
+  The ID of the run that produced the artifact.
+</ParamField>
+
+<ParamField path="artifact_id" type="string" required>
+  The ID of the artifact to read. Use the `artifact_id` values from the list endpoint.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="max_lines" type="integer" default="400">
+  Maximum number of lines to return from the artifact. If the file has more lines than this limit, `truncated` is `true` in the response. Increase this value to retrieve the full content.
+</ParamField>
+
+### Response
+
+<ResponseField name="run_id" type="string">
+  The ID of the run this artifact belongs to.
+</ResponseField>
+
+<ResponseField name="artifact" type="object">
+  Metadata about the artifact file.
+
+  <Expandable title="properties">
+    <ResponseField name="artifact_id" type="string">
+      Unique identifier for this artifact.
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Artifact type: `logs` or `summaries`.
+    </ResponseField>
+    <ResponseField name="path" type="string">
+      Filesystem path to the artifact file.
+    </ResponseField>
+    <ResponseField name="exists" type="boolean">
+      Whether the file exists on disk.
+    </ResponseField>
+    <ResponseField name="size_bytes" type="integer">
+      Size of the file in bytes.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  The text content of the artifact, up to `max_lines` lines.
+</ResponseField>
+
+<ResponseField name="truncated" type="boolean">
+  Whether the content was cut off because the file exceeds `max_lines`. If `true`, increase `max_lines` to retrieve more content.
+</ResponseField>
+
+<ResponseField name="line_count" type="integer">
+  The number of lines included in `content`.
+</ResponseField>
+
+### Example
+
+<Steps>
+  <Step title="List artifacts to find the artifact ID">
+    <CodeGroup>
+
+    ```bash curl
+    curl http://127.0.0.1:8284/api/v1/platform/test-runs/run-e2e-001/artifacts
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Read the log artifact">
+    <CodeGroup>
+
+    ```bash curl
+    curl "http://127.0.0.1:8284/api/v1/platform/test-runs/run-e2e-001/artifacts/log?max_lines=400"
+    ```
+
+    </CodeGroup>
+
+    ```json response
+    {
+      "run_id": "run-e2e-001",
+      "artifact": {
+        "artifact_id": "log",
+        "type": "logs",
+        "path": "diagnostics/test-runs/run-e2e-001.log",
+        "exists": true,
+        "size_bytes": 8192
+      },
+      "content": "=== platform_api_e2e_check ===\n...\nPASSED\n1 passed in 4.32s",
+      "truncated": false,
+      "line_count": 38
+    }
+    ```
+  </Step>
+
+  <Step title="Read more if content is truncated">
+    If `truncated` is `true`, increase the `max_lines` parameter.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl "http://127.0.0.1:8284/api/v1/platform/test-runs/run-e2e-001/artifacts/log?max_lines=2000"
+    ```
+
+    </CodeGroup>
+  </Step>
+</Steps>

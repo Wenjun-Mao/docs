@@ -1,0 +1,97 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Letta Open ADE",
+  "theme": "luma",
+  "colors": {
+    "primary": "#6366F1",
+    "light": "#EEF2FF",
+    "dark": "#312E81"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/Wenjun-Mao/Letta-Open-ADE"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/agents",
+              "concepts/memory",
+              "concepts/tools",
+              "concepts/prompts-personas"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/agent-studio",
+              "modules/prompt-persona-lab",
+              "modules/toolbench",
+              "modules/test-center"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker-compose",
+              "deployment/llm-backends",
+              "deployment/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": [
+              "api/agents/list",
+              "api/agents/create",
+              "api/agents/details",
+              "api/agents/messages"
+            ]
+          },
+          {
+            "group": "Platform Control",
+            "pages": [
+              "api/platform/capabilities",
+              "api/platform/system",
+              "api/platform/model",
+              "api/platform/memory",
+              "api/platform/tools"
+            ]
+          },
+          {
+            "group": "Test Runs",
+            "pages": [
+              "api/test-runs/overview",
+              "api/test-runs/artifacts"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

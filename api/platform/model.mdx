@@ -1,0 +1,69 @@
+---
+title: "PATCH the default LLM model for a Letta agent"
+description: "PATCH /api/v1/platform/agents/:id/model changes the persisted default LLM model handle for an agent. Individual messages can still use per-request overrides."
+---
+
+Use this endpoint to swap the default LLM model an agent uses for all future messages. The change is persisted to Letta backend storage immediately. You do not need to recreate the agent — only the stored model handle is updated. Individual messages can still override the model at call time using the `override_model` parameter on the runtime messages endpoint.
+
+## Endpoint
+
+```
+PATCH /api/v1/platform/agents/{agent_id}/model
+```
+
+## Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The ID of the agent whose default model you want to change.
+</ParamField>
+
+## Request body
+
+<ParamField body="model" type="string" required>
+  The new model handle to persist. Must be a non-empty string, for example `lmstudio_openai/qwen3.5-27b`. The handle must be resolvable by the connected Letta server.
+</ParamField>
+
+## Response
+
+<ResponseField name="agent_id" type="string">
+  The ID of the agent that was updated.
+</ResponseField>
+
+<ResponseField name="model_before" type="string">
+  The model handle that was stored before this update.
+</ResponseField>
+
+<ResponseField name="model_after" type="string">
+  The new model handle now stored for this agent.
+</ResponseField>
+
+<ResponseField name="system" type="string">
+  The agent's current system prompt, unchanged by this operation.
+</ResponseField>
+
+<Note>
+  This endpoint changes the persisted default model only. To override the model for a single message without persisting the change, use the `override_model` field on `POST /api/v1/platform/agents/{agent_id}/messages`.
+</Note>
+
+## Example
+
+<CodeGroup>
+
+```bash curl
+curl -X PATCH http://127.0.0.1:8284/api/v1/platform/agents/agent-abc123/model \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "lmstudio_openai/qwen3.5-27b"
+  }'
+```
+
+</CodeGroup>
+
+```json response
+{
+  "agent_id": "agent-abc123",
+  "model_before": "lmstudio_openai/qwen/qwen3.5-35b-a3b",
+  "model_after": "lmstudio_openai/qwen3.5-27b",
+  "system": "You are a helpful assistant. Always respond in concise, plain language."
+}
+```

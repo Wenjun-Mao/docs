@@ -1,0 +1,170 @@
+---
+title: "Agent Studio: chat, inspect, and control agents"
+description: "Agent Studio is your primary workspace for interacting with Letta agents — chat in real time, inspect execution traces, and manage persistent state."
+---
+
+Agent Studio is the unified workspace for all agent interaction in Letta Open ADE. From a single layout you can create or select an agent, exchange messages in a live chat interface, step through the execution trace of every turn, and read or edit the agent's full persistent state — including memory blocks, system prompt, persona, and attached tools.
+
+## Creating a new agent
+
+The Inspector panel on the left side of Agent Studio contains a form for bootstrapping new agents.
+
+<Steps>
+  <Step title="Fill in the agent details">
+    Enter a name in the **New agent name** field (defaults to `ade-agent`). Then choose values from each dropdown:
+
+    | Field | Default | Notes |
+    |---|---|---|
+    | Model | _(none — required)_ | Must select a model before creating. |
+    | Prompt | `custom_v2` | `custom_v2` is the recommended baseline. `custom_v1` is kept for regression comparison. |
+    | Embedding | _(server default)_ | Leave blank to use the Letta server default embedding. |
+
+  </Step>
+  <Step title="Create the agent">
+    Click **Create Agent**. The new agent is automatically selected and a blank chat is opened.
+  </Step>
+</Steps>
+
+<Note>
+  The model field is required. If you click **Create Agent** without selecting a model, you will see an error asking you to select one first.
+</Note>
+
+## Selecting an existing agent
+
+Use the **Existing agents** dropdown below the create form to switch to any agent already registered on the server. The dropdown shows each agent's name and model handle. After you select an agent, Studio fetches its details and persistent state automatically.
+
+You can also click **Refresh Agents** to reload the list from the server.
+
+## Sending messages
+
+Type your message in the text area at the bottom of the Chat panel and press **Enter** to send. Use **Shift+Enter** to insert a newline without sending.
+
+Each assistant reply shows the response latency next to the message. While a reply is in flight the **Send** button is disabled.
+
+<Tip>
+  Use **Pull Existing Info** to hydrate the chat view with the agent's full conversation history from Postgres. This loads messages from the persistent store into the Studio chat without sending a new turn.
+</Tip>
+
+## Execution Trace panel
+
+After each turn the right-side **Execution Trace** panel renders a timeline of every step the agent took to produce its response.
+
+### Step types
+
+| Type | Description |
+|---|---|
+| `assistant` | The final visible message produced by the agent. |
+| `tool_call` | A tool invocation, including the tool name and call arguments. |
+| `tool_return` | The result returned by a tool call. |
+| `reasoning` | Internal chain-of-thought reasoning steps. |
+
+### Timeline filters
+
+Use the filter buttons above the timeline to narrow the view:
+
+- **All** — shows every step type
+- **Assistant** — shows only `assistant` steps
+- **Tool** — shows both `tool_call` and `tool_return` steps
+- **Reasoning** — shows only `reasoning` steps
+
+### Human Memory Diff
+
+Below the timeline, the **Human Memory Diff** section shows a highlighted before/after diff of the `human` memory block for the most recent turn. Lines that were added are marked `[+]` and lines that were removed are marked `[-]`.
+
+### Response latency
+
+The panel header shows the latency of the most recent response. Latency is reported in milliseconds when under one second and in seconds when at or above one second.
+
+### Raw Prompt Context
+
+Toggle **Show** next to the **Raw Prompt Context** heading to reveal the last 10 messages that were sent to the LLM for the selected agent. This is useful for verifying that the context window contains what you expect.
+
+## Persistent State panel
+
+The **Persistent State** section at the bottom of the right panel reflects data read directly from the Letta backend (Postgres). Use the **History limit** field (range: 10–500, default: 120) to control how many conversation rows are fetched.
+
+<Tabs>
+  <Tab title="Summary">
+    Shows agent metadata returned from the Letta backend:
+
+    - Agent ID and name
+    - Active model handle
+    - Context window size
+    - Number of history rows displayed vs. total persisted
+    - Message counts broken down by type
+    - Tool rules applied to the agent
+  </Tab>
+  <Tab title="Memory">
+    Lists all memory blocks currently attached to the agent. Each block shows its label, optional description, and current value. You can edit the `persona` and `human` blocks directly from this tab using the **Edit** button next to each.
+  </Tab>
+  <Tab title="History">
+    Renders the paginated conversation history retrieved from Postgres. Each item shows its message type, timestamp, and content. Use the **History limit** field to expand or narrow what is displayed.
+  </Tab>
+</Tabs>
+
+## Inspector panel
+
+The Inspector panel (Model, Prompt, Tools tabs) appears once an agent is selected.
+
+<Tabs>
+  <Tab title="Model">
+    Shows the agent's current type, model handle, context window limit, last interaction timestamp, and the full `llm_config` JSON from the Letta server.
+
+    To change the model, select a new handle from the **Agent model override** dropdown and click **Apply Model**. The change is persisted to the Letta backend immediately.
+  </Tab>
+  <Tab title="Prompt">
+    Displays the current system prompt in a read-only code block. Three action buttons let you open an inline editor for each editable field:
+
+    - **Edit System Prompt** — replaces the persisted system prompt
+    - **Edit Persona** — updates the `persona` core-memory block
+    - **Edit Human** — updates the `human` core-memory block
+
+    Below the system prompt, the **Revision Timeline** lists every recorded edit for this agent. Each entry shows the field (`system`, `persona`, or `human`), the timestamp, the source endpoint that wrote the change, the character delta, and an expandable before/after preview.
+
+    <Note>
+      Revisions are stored in `diagnostics/prompt_persona_revisions.jsonl` on the backend host. The timeline loads up to 120 records per agent by default.
+    </Note>
+  </Tab>
+  <Tab title="Tools">
+    Lists all tools registered on the Letta server. Attached tools appear first, sorted alphabetically within each group.
+
+    Each tool card shows the tool name, a truncated description, and an **Attach** or **Detach** button. Click **View details** to open a modal with the full description, example prompts, tool type, and source type. Press **Esc** to close the modal.
+
+    Use the search field at the top to filter tools by keyword.
+
+    #### Tool Probe
+
+    The **Tool Probe** section lets you validate that an agent calls the expected tool in response to a test message.
+
+    <Steps>
+      <Step title="Enter probe input">
+        Type the message you want to send to the agent in the **Probe input** field.
+      </Step>
+      <Step title="Set an expected tool name (optional)">
+        Fill in the **Expected tool name** field (for example `search_documents`) if you want to verify a specific tool is called.
+      </Step>
+      <Step title="Run the probe">
+        Click **Run Tool Probe**. The result block shows:
+
+        | Field | Description |
+        |---|---|
+        | `tool_call_count` | Number of `tool_call` steps in the response sequence. |
+        | `tool_return_count` | Number of `tool_return` steps in the response sequence. |
+        | `expected_tool_name` | The name you provided, or `(none)` if omitted. |
+        | `expected_tool_matched` | `true` if any tool call matched the expected name, `false` otherwise, or `null` if no expected name was provided. |
+      </Step>
+    </Steps>
+
+    <Tip>
+      The Tool Probe sends a real message to the agent and affects its conversation history. Use a dedicated test agent to avoid polluting production agent state.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| **Enter** | Send the current chat message |
+| **Shift+Enter** | Insert a newline in the message input |
+| **Esc** | Close the tool detail modal or the inline editor |

@@ -1,0 +1,120 @@
+---
+title: "Connect LLM and embedding backends to ADE"
+description: "Letta Open ADE supports Doubao (Ark), LM Studio, and any OpenAI-compatible endpoint. Learn how to configure each backend in your .env file."
+---
+
+Letta routes all LLM calls through its OpenAI-compatible provider path. You configure the backend entirely through environment variables in your `.env` file — no code changes are required. After updating `.env`, restart the `letta_server` service to pick up the new values.
+
+## How model handles work
+
+Letta identifies models using a `provider/model-id` handle format. When you point Letta at a non-OpenAI provider through the OpenAI-compatible path, Letta discovers available models and prefixes them with `openai-proxy/` rather than `openai/`:
+
+```
+openai-proxy/doubao-seed-1-8-251228
+lmstudio_openai/qwen3.5-27b
+letta/letta-free
+```
+
+Use these exact handle strings when creating agents or setting `LETTA_MODEL_HANDLE` and `LETTA_DEFAULT_LLM_HANDLE` in your `.env`.
+
+## Configuring a backend
+
+<Tabs>
+  <Tab title="Doubao (Ark)">
+    Doubao uses the Volcengine Ark OpenAI-compatible endpoint. Set these variables in your `.env`:
+
+    ```bash
+    OPENAI_API_BASE=https://ark.cn-beijing.volces.com/api/v3
+    OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+    OPENAI_API_KEY=replace_with_your_ark_api_key
+
+    # The Ark model ID to use for chat
+    DOUBAO_CHAT_MODEL=doubao-seed-1-8-251228
+
+    # The Letta model handle — must match Letta's discovered format
+    LETTA_MODEL_HANDLE=openai-proxy/doubao-seed-1-8-251228
+    ```
+
+    <Warning>
+    The model handle for Doubao is `openai-proxy/<model-id>`, not `openai/<model-id>`. Using the wrong prefix causes a "handle not found" error when creating an agent.
+    </Warning>
+
+    The Ark key supports chat completions and OpenAI-style tool calling. It does not provide a usable text embedding endpoint through the OpenAI-compatible path, so embeddings fall back to `letta/letta-free` (see [Letta free embedding](#letta-free-embedding-cloud-fallback) below).
+  </Tab>
+
+  <Tab title="LM Studio">
+    LM Studio exposes a local OpenAI-compatible server. When running inside Docker on Mac or Windows, use `host.docker.internal` to reach the host machine:
+
+    ```bash
+    LMSTUDIO_BASE_URL=http://host.docker.internal:1234
+
+    # Default LLM handle
+    LETTA_DEFAULT_LLM_HANDLE=lmstudio_openai/qwen3.5-27b
+
+    # Default embedding handle
+    LETTA_DEFAULT_EMBEDDING_HANDLE=lmstudio_openai/text-embedding-qwen3-embedding-0.6b
+
+    # Backward-compatible alias
+    LETTA_EMBEDDING_HANDLE=lmstudio_openai/text-embedding-qwen3-embedding-0.6b
+    ```
+
+    Other available LM Studio model handles:
+
+    | Handle | Model |
+    |---|---|
+    | `lmstudio_openai/qwen3.5-27b` | Qwen 3.5 27B |
+    | `lmstudio_openai/qwen/qwen3.5-35b-a3b` | Qwen 3.5 35B A3B |
+    | `lmstudio_openai/text-embedding-qwen3-embedding-0.6b` | Qwen3 Embedding 0.6B |
+
+    <Note>
+    On Linux, `host.docker.internal` is not automatically resolved. Use your host machine's actual LAN IP address instead, or add `host.docker.internal` as an `extra_hosts` entry in `compose.yaml`.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Letta free embedding (cloud fallback)
+
+When your LLM backend does not provide a working embedding endpoint, use Letta's built-in cloud embedding service:
+
+```bash
+LETTA_DEFAULT_EMBEDDING_HANDLE=letta/letta-free
+LETTA_EMBEDDING_HANDLE=letta/letta-free
+```
+
+`letta/letta-free` requires outbound internet access from the `letta_server` container. It is the default fallback for the Doubao backend.
+
+## Verifying model discovery
+
+After restarting `letta_server`, check which models Letta can see from your configured backend:
+
+```bash
+curl http://127.0.0.1:8283/v1/models/
+```
+
+<Note>
+Letta's model listing route redirects to a trailing-slash URL (`/v1/models/`). Include the trailing slash to avoid a redirect.
+</Note>
+
+The response lists all discovered handles. Confirm that the handle you plan to use — for example `openai-proxy/doubao-seed-1-8-251228` — appears in the list before creating agents.
+
+## Changing the model after deployment
+
+To switch to a different Doubao model after the stack is running:
+
+1. Update `DOUBAO_CHAT_MODEL` in `.env` to the new Ark model ID.
+2. Update `LETTA_MODEL_HANDLE` to `openai-proxy/<new-model-id>`.
+3. Restart the Letta server:
+
+```bash
+docker compose up -d --force-recreate letta_server
+```
+
+4. Verify the new handle appears in the model list:
+
+```bash
+curl http://127.0.0.1:8283/v1/models/
+```
+
+<Tip>
+Always use the full Ark model ID (for example `doubao-seed-1-8-251228`) rather than a short alias. Letta's model discovery depends on the exact ID returned by the Ark `/models` endpoint.
+</Tip>

@@ -1,0 +1,56 @@
+---
+title: "Letta Open ADE: AI Agent Development Environment"
+description: "Letta Open ADE is a self-hosted agent development environment built on Letta. Learn what ADE offers, its module overview, and how each service fits together."
+---
+
+Letta Open ADE (Agent Development Environment) is a self-hosted platform built on top of [Letta](https://letta.com) — a framework for building AI agents with persistent memory. ADE adds a complete operator workspace: a REST API for programmatic control, a Next.js frontend with specialized modules, and a suite of automated validation tools to help you develop reliable agents.
+
+## What ADE gives you
+
+<CardGroup cols={2}>
+  <Card title="Agent Studio" icon="robot" href="/modules/agent-studio">
+    Chat with agents in real time, inspect every step of the execution trace, and manage prompts, models, and tools without redeploying.
+  </Card>
+  <Card title="Prompt & Persona Lab" icon="pen-to-square" href="/modules/prompt-persona-lab">
+    Edit system prompts and personas, browse the full revision history, and compare before/after with a visual diff.
+  </Card>
+  <Card title="Toolbench" icon="wrench" href="/modules/toolbench">
+    Discover all tools registered on your Letta server, attach or detach them from agents, and run live tool-call probes.
+  </Card>
+  <Card title="Test Center" icon="flask" href="/modules/test-center">
+    Trigger backend validation suites — persona guardrail runs, provider matrix checks, end-to-end smoke tests — and view their artifacts.
+  </Card>
+</CardGroup>
+
+## Key capabilities
+
+- **Multiple LLM backends** — connect Doubao (Ark), LM Studio, or any OpenAI-compatible endpoint; switch models without restarting agents
+- **Persistent agent memory** — agents remember context across sessions via Letta's core memory blocks (`persona` and `human`), stored in Postgres with pgvector
+- **Per-request overrides** — send a single message with a different model or system prompt without changing the agent's stored config
+- **Revision history** — every system prompt, persona, or human block edit is logged with timestamps, before/after previews, and character deltas
+- **REST API** — full programmatic access to all agent operations via the Agent Platform API on port 8284
+
+## Architecture overview
+
+ADE runs as a set of Docker services:
+
+| Service | Role | Default port |
+|---|---|---|
+| `letta_server` | Letta agent runtime + REST API | 8283 |
+| `letta_db` | Postgres + pgvector for agent state | 5432 |
+| `redis` | Message queue for Letta | 6379 |
+| `dev_ui` | Agent Platform API (FastAPI) | 8284 |
+| `ade_frontend` | ADE web interface (Next.js) | 3000 |
+
+The `dev_ui` service is the primary integration point: it wraps the Letta SDK and exposes a versioned REST API that the ADE frontend and your own scripts can call.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Deploy ADE and create your first agent in under 10 minutes.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Browse the full Agent Platform REST API documentation.
+  </Card>
+</CardGroup>

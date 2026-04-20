@@ -1,0 +1,102 @@
+---
+title: "GET /api/v1/agents — list all agents"
+description: "GET /api/v1/agents returns a paginated list of agents ordered by last update time. Accepts limit and include_last_interaction query params."
+---
+
+The list agents endpoint returns every agent registered on the connected Letta server, sorted by the most recently updated agent first. You can control how many results you receive and whether the response includes a resolved last interaction timestamp derived from actual message history.
+
+## Endpoint
+
+```
+GET /api/v1/agents
+```
+
+## Query parameters
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of agents to return. Must be greater than or equal to `1`. Values above `500` are clamped to `500`.
+</ParamField>
+
+<ParamField query="include_last_interaction" type="boolean" default="false">
+  When `true`, the API fetches actual message history for each agent to determine the real last interaction time. This produces a more accurate `last_interaction_at` value but is significantly slower because it issues one additional request to the Letta server per agent. When `false`, `last_interaction_at` is set to `last_updated_at` (or `created_at` if `last_updated_at` is absent).
+</ParamField>
+
+## Response
+
+<ResponseField name="total" type="integer" required>
+  Total number of agents returned in this response. Because all agents are fetched before the `limit` is applied for sorting, `total` reflects the count after truncation, not the full count on the server.
+</ResponseField>
+
+<ResponseField name="items" type="object[]" required>
+  Ordered list of agents, most recently updated first.
+
+  <Expandable title="item fields">
+    <ResponseField name="id" type="string" required>
+      Letta agent UUID.
+    </ResponseField>
+
+    <ResponseField name="name" type="string" required>
+      Display name of the agent.
+    </ResponseField>
+
+    <ResponseField name="model" type="string" required>
+      Model handle the agent is configured to use (for example, `openai-proxy/doubao-seed-1-8-251228`).
+    </ResponseField>
+
+    <ResponseField name="created_at" type="string" required>
+      ISO 8601 timestamp of when the agent was created.
+    </ResponseField>
+
+    <ResponseField name="last_updated_at" type="string" required>
+      ISO 8601 timestamp of the most recent update to the agent's configuration.
+    </ResponseField>
+
+    <ResponseField name="last_interaction_at" type="string" required>
+      ISO 8601 timestamp of the most recent interaction. When `include_last_interaction` is `false`, this is identical to `last_updated_at`. When `include_last_interaction` is `true`, it reflects the timestamp of the latest non-system message in the agent's history.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Sorting
+
+Agents are sorted by `last_updated_at` descending — the most recently updated agent appears first. If `last_updated_at` is absent for an agent, `created_at` is used as the sort key.
+
+## Example
+
+<CodeGroup>
+
+```bash Request
+curl http://127.0.0.1:8284/api/v1/agents?limit=2
+```
+
+```json Response
+{
+  "total": 2,
+  "items": [
+    {
+      "id": "agent-uuid-a1b2c3",
+      "name": "dev-agent",
+      "model": "lmstudio_openai/qwen3.5-27b",
+      "created_at": "2025-04-10T08:00:00+00:00",
+      "last_updated_at": "2025-04-14T11:30:00+00:00",
+      "last_interaction_at": "2025-04-14T11:30:00+00:00"
+    },
+    {
+      "id": "agent-uuid-d4e5f6",
+      "name": "test-agent",
+      "model": "openai-proxy/doubao-seed-1-8-251228",
+      "created_at": "2025-04-09T14:22:00+00:00",
+      "last_updated_at": "2025-04-13T09:15:00+00:00",
+      "last_interaction_at": "2025-04-13T09:15:00+00:00"
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+To include resolved interaction timestamps, add `include_last_interaction=true`:
+
+```bash
+curl "http://127.0.0.1:8284/api/v1/agents?limit=10&include_last_interaction=true"
+```

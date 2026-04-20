@@ -1,0 +1,89 @@
+---
+title: "What are agents in Letta Open ADE?"
+description: "Agents in Letta Open ADE are stateful AI entities with a model, system prompt, memory, and tools. Learn how agents are created and managed."
+---
+
+An agent in Letta Open ADE is a named, stateful entity that the Letta server manages in Postgres. Each agent carries its own model configuration, system prompt, memory blocks, and set of attached tools. Because all of this state is persisted in the database, an agent remembers everything it learned across separate conversation sessions — there is no in-memory state that disappears when a container restarts.
+
+## What an agent contains
+
+Every agent has the following properties:
+
+| Property | Description |
+|---|---|
+| `id` | Unique identifier assigned by Letta at creation time |
+| `name` | Human-readable label, for example `dev-agent` |
+| `agent_type` | Type string set by the Letta server, for example `memgpt_agent` |
+| `model` | Provider-qualified model handle (see below) |
+| `embedding` | Embedding model handle used for memory retrieval |
+| `context_window_limit` | Maximum tokens allowed in the agent's context window; defaults to `16384` |
+| `tool_rules` | Rules governing when and how the agent may call tools |
+| `system` | The agent's system prompt text |
+| `memory` | A map of `label → value` for each core memory block |
+| `tools` | A map of `name → description` for each attached tool |
+| `created_at` | ISO-8601 timestamp of agent creation |
+| `last_updated_at` | ISO-8601 timestamp of the most recent update |
+
+You can inspect all of these fields by calling `GET /api/v1/agents/{agent_id}/details`.
+
+## Model handles
+
+A model handle is a string that tells Letta which provider to route the request to and which model to use. The format is `provider/model-name`.
+
+Common handles used with ADE:
+
+| Handle | Backend | Notes |
+|---|---|---|
+| `lmstudio_openai/qwen3.5-27b` | LM Studio (local) | Recommended default for local development |
+| `lmstudio_openai/qwen/qwen3.5-35b-a3b` | LM Studio (local) | Higher quality; heavier VRAM usage |
+| `openai-proxy/doubao-seed-1-8-251228` | Doubao / Ark | Requires `OPENAI_API_KEY` in `.env` |
+
+When you create an agent through the ADE UI or the `POST /api/v1/agents` endpoint, you must supply a model handle. ADE will not fall back to an empty default — you have to make an explicit choice so that the agent's behaviour is predictable and reproducible.
+
+## Agent lifecycle
+
+```
+create → chat → update → inspect
+```
+
+<Steps>
+  <Step title="Create">
+    Call `POST /api/v1/agents` (or use Agent Studio) with a `name`, `model`, `prompt_key`, and optional `embedding`. Letta creates the agent record in Postgres, initialises its memory blocks, and returns the new `id`.
+  </Step>
+  <Step title="Chat">
+    Send a message via `POST /api/v1/platform/agents/{agent_id}/messages` or through the Agent Studio chat panel. Letta runs the agent's model against the full context (system prompt + memory + conversation history) and returns the response along with any tool calls.
+  </Step>
+  <Step title="Update">
+    Change the agent's system prompt, model handle, or memory block values at any time using the `PATCH` endpoints under `/api/v1/platform/agents/{agent_id}/`. All changes are persisted immediately in Postgres; no restart is required.
+  </Step>
+  <Step title="Inspect">
+    Retrieve a snapshot of persisted state — agent metadata, memory blocks, attached tools, and conversation history — with `GET /api/v1/agents/{agent_id}/persistent_state`.
+  </Step>
+</Steps>
+
+## Default creation parameters
+
+When you create an agent through ADE, the following defaults are applied:
+
+| Setting | Default value |
+|---|---|
+| `name` | `dev-agent` |
+| `context_window_limit` | `16384` tokens |
+| `timezone` | `Asia/Shanghai` |
+| `system` (prompt) | `custom_v2` prompt text |
+| `persona` memory block | `linxiaotang` persona |
+| `human` memory block | Blank user template |
+
+The `timezone` is used by ADE to inject the current local datetime when you ask a time-related question, so the agent can answer accurately without disclaiming it cannot access a calendar.
+
+## How agents persist state
+
+The Letta server stores all agent data in Postgres (via pgvector). The `dev_ui` service connects to the Letta server over HTTP — it does not write to Postgres directly. When ADE updates a memory block or system prompt, it calls the Letta SDK, which writes the change to Postgres transactionally. This means:
+
+- Agent state survives container restarts.
+- Memory blocks updated mid-conversation are immediately available to the next chat turn.
+- Conversation history is also persisted and can be retrieved in full via `GET /api/v1/agents/{agent_id}/persistent_state`.
+
+<Tip>
+To list all existing agents and see their models and timestamps, call `GET /api/v1/agents`. The response is sorted by `last_updated_at` descending, so recently active agents appear first.
+</Tip>

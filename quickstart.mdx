@@ -1,0 +1,195 @@
+---
+title: "Get started with Letta Open ADE"
+description: "Learn how to deploy Letta Open ADE with Docker Compose, connect an LLM backend, and create your first memory-enabled AI agent in under 10 minutes."
+---
+
+Letta Open ADE runs as a set of Docker Compose services: the Letta server, Postgres with pgvector, Redis, the Agent Platform API (`dev_ui`), and the ADE frontend. This guide walks you from a fresh clone to a running agent in a single terminal session.
+
+## Prerequisites
+
+Before you start, make sure you have the following installed:
+
+- [Docker](https://docs.docker.com/get-docker/) 24 or later with the Compose plugin
+- [Docker Compose](https://docs.docker.com/compose/install/) v2.20 or later (bundled with Docker Desktop)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) — used for running Python notebooks and checks
+
+You also need credentials for at least one LLM backend:
+
+- **Doubao / Ark** — an ARK API key from [Volcengine](https://www.volcengine.com/)
+- **LM Studio** — [LM Studio](https://lmstudio.ai/) running locally on port 1234 with a model loaded
+
+<Steps>
+
+<Step title="Clone the repository">
+
+Clone the repo and move into the project directory:
+
+```bash
+git clone https://github.com/Wenjun-Mao/Letta-Open-ADE.git
+cd Letta-Open-ADE
+```
+
+</Step>
+
+<Step title="Configure your .env file">
+
+Copy the example environment file and open it in your editor:
+
+```bash
+cp .env.example .env
+```
+
+The `.env.example` ships with sensible defaults. At minimum, set the credentials for the LLM backend you plan to use.
+
+<Tabs>
+  <Tab title="Doubao / Ark">
+
+Set your ARK API key and the Doubao model handle:
+
+```bash
+# .env — Doubao / Ark section
+OPENAI_API_BASE=https://ark.cn-beijing.volces.com/api/v3
+OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+OPENAI_API_KEY=your_ark_api_key_here
+
+DOUBAO_CHAT_MODEL=doubao-seed-1-8-251228
+LETTA_MODEL_HANDLE=openai-proxy/doubao-seed-1-8-251228
+```
+
+Leave `LMSTUDIO_BASE_URL` at its default; it is only used if you pick an LM Studio model handle when creating an agent.
+
+  </Tab>
+  <Tab title="LM Studio">
+
+Set the URL for your local LM Studio server and the model handle you want as the default:
+
+```bash
+# .env — LM Studio section
+LMSTUDIO_BASE_URL=http://host.docker.internal:1234
+
+LETTA_DEFAULT_LLM_HANDLE=lmstudio_openai/qwen3.5-27b
+LETTA_DEFAULT_EMBEDDING_HANDLE=lmstudio_openai/text-embedding-qwen3-embedding-0.6b
+```
+
+`host.docker.internal` resolves to your host machine from inside Docker. Make sure LM Studio's local server is running before you start the stack.
+
+  </Tab>
+</Tabs>
+
+</Step>
+
+<Step title="Start the stack">
+
+Pull images and start all services in the background:
+
+```bash
+docker compose up -d
+```
+
+On the first run, Docker downloads the Letta server image (`letta/letta:0.16.7` by default) and the `dev_ui` image from GHCR. This can take a few minutes depending on your connection.
+
+<Note>
+The Letta server has a 180-second start period in its health check to allow NLTK data to initialise. The `dev_ui` service starts only after `letta_server` is healthy, so it may appear as `starting` for a couple of minutes.
+</Note>
+
+</Step>
+
+<Step title="Verify all services are healthy">
+
+Check that every service has reached the `healthy` or `running` state:
+
+```bash
+docker compose ps
+```
+
+You should see output similar to:
+
+```
+NAME                    STATUS
+letta-hybrid-letta_db-1      healthy
+letta-hybrid-redis-1         healthy
+letta-hybrid-letta_server-1  healthy
+letta-hybrid-dev_ui-1        running
+letta-hybrid-ade_frontend-1  running
+```
+
+Confirm the Agent Platform API is reachable and reports its capability matrix:
+
+```bash
+curl http://127.0.0.1:8284/api/v1/platform/capabilities
+```
+
+A healthy response looks like:
+
+```json
+{
+  "enabled": true,
+  "strict_mode": false,
+  "missing_required": [],
+  "runtime": {
+    "per_request_model_override": true,
+    "per_request_model_override_via_extra_body": false,
+    "per_request_system_override": true,
+    "per_request_system_override_via_extra_body": false
+  },
+  "control": {
+    "update_system_prompt": true,
+    "update_agent_model": true,
+    "update_core_memory_block": true,
+    "attach_tool": true,
+    "detach_tool": true
+  }
+}
+```
+
+If `missing_required` is non-empty, the Letta SDK version in your `dev_ui` image does not support one or more platform capabilities. Pull the latest `dev_ui` image and recreate the service.
+
+</Step>
+
+<Step title="Open the ADE frontend">
+
+Navigate to [http://127.0.0.1:3000](http://127.0.0.1:3000) in your browser. You should see the ADE dashboard.
+
+The Agent Platform API is also directly accessible at [http://127.0.0.1:8284](http://127.0.0.1:8284) and the Letta server at [http://127.0.0.1:8283](http://127.0.0.1:8283).
+
+</Step>
+
+<Step title="Create your first agent">
+
+In the ADE frontend, open **Agent Studio** and click **New Agent**. Fill in the form:
+
+- **Name** — any identifier, for example `my-first-agent`
+- **Model** — select the model handle matching your backend (for example `lmstudio_openai/qwen3.5-27b` or `openai-proxy/doubao-seed-1-8-251228`)
+- **Prompt** — leave the default `Custom V2 Chat` for the first run
+- **Embedding** — select an embedding handle, or leave blank to use `letta/letta-free`
+
+Click **Create**. ADE calls `POST /api/v1/agents` and returns the new agent's ID.
+
+</Step>
+
+<Step title="Send your first message">
+
+With your agent selected in Agent Studio, type a message in the chat input and press **Send**. You will see the agent's inner monologue, any tool calls, and the final assistant reply in the execution trace panel.
+
+After the turn completes, the **Memory diff** panel shows whether the `human` memory block was updated based on what you told the agent.
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Learn all available environment variables and how to switch LLM backends.
+  </Card>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Understand what an agent is and how it persists state across conversations.
+  </Card>
+  <Card title="Memory" icon="brain" href="/concepts/memory">
+    Learn how persona and human memory blocks shape agent behaviour.
+  </Card>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Discover, attach, and test tools on your agent.
+  </Card>
+</CardGroup>

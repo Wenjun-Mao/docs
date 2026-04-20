@@ -1,0 +1,55 @@
+---
+title: "Letta Open ADE: Agent Development Environment"
+description: "Letta Open ADE is a full-stack platform for building and operating memory-enabled AI agents. Manage agents, prompts, tools, and test runs from one place."
+---
+
+Letta Open ADE (Agent Development Environment) gives you a complete operator workspace for Letta-powered AI agents. From a single interface you can create agents, edit their system prompts and personas, attach tools, chat with them in real time, and run automated validation suites — all backed by a versioned REST API.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get your first agent running in minutes with Docker Compose and the ADE frontend.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Set up LLM backends, embedding models, and environment options.
+  </Card>
+  <Card title="Agent Studio" icon="robot" href="/modules/agent-studio">
+    Chat with agents, inspect execution traces, and manage persistent state.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the full Agent Platform REST API with request and response examples.
+  </Card>
+</CardGroup>
+
+## What you can do
+
+<CardGroup cols={2}>
+  <Card title="Prompt & Persona Lab" icon="pen-to-square" href="/modules/prompt-persona-lab">
+    Edit system prompts, personas, and human memory blocks with a full revision history.
+  </Card>
+  <Card title="Toolbench" icon="wrench" href="/modules/toolbench">
+    Browse available tools, attach or detach them from agents, and probe tool-call behavior.
+  </Card>
+  <Card title="Test Center" icon="flask" href="/modules/test-center">
+    Orchestrate and monitor backend check suites and persona guardrail runners.
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/agents">
+    Understand agents, memory blocks, tools, and prompts before you dive in.
+  </Card>
+</CardGroup>
+
+## How ADE works
+
+<Steps>
+  <Step title="Deploy the stack">
+    Start the Letta server, Postgres, Redis, and ADE services with a single `docker compose up -d`.
+  </Step>
+  <Step title="Connect an LLM backend">
+    Point ADE at Doubao (Ark), LM Studio, or any OpenAI-compatible endpoint via environment variables.
+  </Step>
+  <Step title="Create your first agent">
+    Use Agent Studio or the REST API to create a named agent with your chosen model, embedding, and system prompt.
+  </Step>
+  <Step title="Iterate with confidence">
+    Edit prompts and personas, attach tools, run test suites, and review revision history — all without redeploying.
+  </Step>
+</Steps>

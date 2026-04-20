@@ -1,0 +1,175 @@
+---
+title: "Configure LLM backends and ADE settings"
+description: "Configure Letta Open ADE by setting LLM backends, embedding models, API ports, and agent defaults in your .env file before running the stack."
+---
+
+All runtime configuration for Letta Open ADE lives in a single `.env` file at the root of the repository. Copy `.env.example` to `.env` and edit the values described below before running `docker compose up -d`.
+
+## LLM backend
+
+ADE supports any OpenAI-compatible LLM endpoint. Two backends are pre-configured in `.env.example`.
+
+<Tabs>
+  <Tab title="Doubao / Ark">
+
+Doubao is accessed through Volcengine's ARK endpoint, which is OpenAI-compatible. Set the following variables:
+
+```bash
+OPENAI_API_BASE=https://ark.cn-beijing.volces.com/api/v3
+OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+OPENAI_API_KEY=replace_with_your_ark_api_key
+
+# Model name passed to the ARK API
+DOUBAO_CHAT_MODEL=doubao-seed-1-8-251228
+
+# Letta provider-qualified model handle
+LETTA_MODEL_HANDLE=openai-proxy/doubao-seed-1-8-251228
+```
+
+`LETTA_MODEL_HANDLE` uses the `openai-proxy/` prefix, which tells Letta to route requests through its built-in OpenAI-compatible provider path using the `OPENAI_API_BASE` and `OPENAI_API_KEY` values above.
+
+<Warning>
+The tested ARK key does not expose a usable text-embedding endpoint through the OpenAI-compatible `/embeddings` path. Use `letta/letta-free` or an LM Studio embedding model for the embedding handle when using Doubao as your chat backend.
+</Warning>
+
+  </Tab>
+  <Tab title="LM Studio">
+
+LM Studio runs a local OpenAI-compatible server. Set the base URL and the model/embedding handles matching the models you have loaded:
+
+```bash
+LMSTUDIO_BASE_URL=http://host.docker.internal:1234
+
+# Default model handle (must match a model loaded in LM Studio)
+LETTA_DEFAULT_LLM_HANDLE=lmstudio_openai/qwen3.5-27b
+
+# Default embedding handle
+LETTA_DEFAULT_EMBEDDING_HANDLE=lmstudio_openai/text-embedding-qwen3-embedding-0.6b
+```
+
+`lmstudio_openai/` is the provider prefix Letta uses to route requests to the LM Studio endpoint. The part after the slash must match the model identifier shown in LM Studio's model list.
+
+<Note>
+`host.docker.internal` resolves to your host machine's loopback address from inside Docker. On Linux hosts, you may need to add `--add-host=host.docker.internal:host-gateway` to the `dev_ui` service in `compose.yaml` if this does not resolve automatically.
+</Note>
+
+  </Tab>
+</Tabs>
+
+## Embedding model
+
+The embedding handle controls which model Letta uses to encode text for memory retrieval. Set it with:
+
+```bash
+LETTA_DEFAULT_EMBEDDING_HANDLE=lmstudio_openai/text-embedding-qwen3-embedding-0.6b
+```
+
+The three supported options out of the box are:
+
+| Handle | Backend | Notes |
+|---|---|---|
+| `lmstudio_openai/text-embedding-qwen3-embedding-0.6b` | LM Studio (local) | Recommended for fully offline setups |
+| `lmstudio_openai/text-embedding-nomic-embed-text-v1.5` | LM Studio (local) | Alternative local model |
+| `letta/letta-free` | Letta cloud | Requires outbound network access; no API key needed |
+
+`LETTA_EMBEDDING_HANDLE` is a backward-compatible alias for older startup scripts and resolves to the same model as `LETTA_DEFAULT_EMBEDDING_HANDLE` when both are set.
+
+## Port configuration
+
+| Variable | Default | Service |
+|---|---|---|
+| `LETTA_API_PORT` | `8283` | Letta server REST API |
+| `LETTA_ADE_PORT` | `8083` | Letta ADE built-in web UI (Letta upstream) |
+| _(hardcoded in compose.yaml)_ | `8284` | Agent Platform API (`dev_ui`) |
+| _(hardcoded in compose.yaml)_ | `3000` | Next.js ADE frontend |
+
+The Agent Platform API port (`8284`) and the ADE frontend port (`3000`) are fixed in `compose.yaml`. To change them, edit the `ports` mapping for the `dev_ui` and `ade_frontend` services directly.
+
+## Platform API toggle
+
+```bash
+# Set to 0 or false to disable all /api/v1/platform/* routes
+AGENT_PLATFORM_API_ENABLED=1
+```
+
+When set to `0`, every request to the platform API returns HTTP 503. The Letta server itself remains running and accessible on port `8283`.
+
+## Options cache TTL
+
+```bash
+AGENT_PLATFORM_OPTIONS_CACHE_TTL_SECONDS=30
+```
+
+Model and embedding option lists are fetched from the Letta server and cached for this many seconds. Increase the value to reduce Letta API calls; decrease it (minimum `1`) to see newly registered model handles sooner in the ADE UI selectors.
+
+## Strict capabilities mode
+
+```bash
+# Set to 1 or true to fail fast if required capabilities are missing
+AGENT_PLATFORM_STRICT_CAPABILITIES=
+```
+
+When enabled, `dev_ui` checks the Letta SDK's method signatures at startup and raises a `RuntimeError` if any required platform capability (such as `update_core_memory_block` or `attach_tool`) is unavailable. Leave unset in production deployments where you want the service to start even on capability mismatches.
+
+## Image version control
+
+```bash
+LETTA_SERVER_IMAGE=letta/letta:0.16.7
+DEV_UI_IMAGE=ghcr.io/wenjun-mao/letta-doubao-dev-ui:latest
+```
+
+Pin `LETTA_SERVER_IMAGE` to a specific upstream Letta release. Pin `DEV_UI_IMAGE` to a specific GHCR tag (such as `sha-abc1234`) to lock the Agent Platform API version. Both images are pulled automatically by `docker compose pull`.
+
+## Full variable reference
+
+<AccordionGroup>
+  <Accordion title="Database and cache">
+
+| Variable | Default | Description |
+|---|---|---|
+| `LETTA_PG_USER` | `letta` | Postgres username |
+| `LETTA_PG_PASSWORD` | `letta` | Postgres password |
+| `LETTA_PG_DB` | `letta` | Postgres database name |
+| `LETTA_DB_HOST` | `letta_db` | Postgres hostname inside the Docker network |
+| `LETTA_PG_PORT` | `5432` | Postgres port exposed on the host |
+| `LETTA_REDIS_HOST` | `redis` | Redis hostname inside the Docker network |
+| `LETTA_REDIS_PORT` | `6379` | Redis port |
+
+  </Accordion>
+  <Accordion title="Letta server">
+
+| Variable | Default | Description |
+|---|---|---|
+| `LETTA_BASE_URL` | `http://localhost:8283` | URL the `dev_ui` service uses to reach the Letta server |
+| `LETTA_API_PORT` | `8283` | Host port for the Letta REST API |
+| `LETTA_ADE_PORT` | `8083` | Host port for Letta's built-in ADE web UI |
+| `LETTA_DEBUG` | `True` | Enable debug logging in the Letta server |
+| `LETTA_SERVER_IMAGE` | `letta/letta:0.16.7` | Docker image for the Letta server service |
+
+  </Accordion>
+  <Accordion title="LLM backends">
+
+| Variable | Default | Description |
+|---|---|---|
+| `LMSTUDIO_BASE_URL` | `http://host.docker.internal:1234` | LM Studio local server URL |
+| `OPENAI_API_BASE` | `https://ark.cn-beijing.volces.com/api/v3` | ARK (Doubao) API base URL |
+| `OPENAI_BASE_URL` | Same as `OPENAI_API_BASE` | Alias used by some SDK versions |
+| `OPENAI_API_KEY` | _(required)_ | ARK API key |
+| `DOUBAO_CHAT_MODEL` | `doubao-seed-1-8-251228` | Doubao model name sent to the ARK API |
+| `LETTA_MODEL_HANDLE` | `openai-proxy/doubao-seed-1-8-251228` | Letta-qualified handle for Doubao |
+| `LETTA_DEFAULT_LLM_HANDLE` | `lmstudio_openai/qwen3.5-27b` | Default model handle for agent creation |
+| `LETTA_DEFAULT_EMBEDDING_HANDLE` | `lmstudio_openai/text-embedding-qwen3-embedding-0.6b` | Default embedding handle |
+| `LETTA_EMBEDDING_HANDLE` | Same as above | Backward-compatible alias |
+
+  </Accordion>
+  <Accordion title="Platform API">
+
+| Variable | Default | Description |
+|---|---|---|
+| `AGENT_PLATFORM_API_ENABLED` | `1` | Set to `0` to disable all platform API routes |
+| `AGENT_PLATFORM_OPTIONS_CACHE_TTL_SECONDS` | `30` | How long model/embedding lists are cached |
+| `AGENT_PLATFORM_STRICT_CAPABILITIES` | _(unset)_ | Fail startup if required SDK capabilities are missing |
+| `DEV_UI_IMAGE` | `ghcr.io/wenjun-mao/letta-doubao-dev-ui:latest` | Docker image for the Agent Platform API service |
+
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,126 @@
+{
+  "projectType": "saas",
+  "projectName": "Letta Open ADE",
+  "projectDescription": "A full-stack Agent Development Environment for building, operating, and testing memory-enabled AI agents powered by Letta and OpenAI-compatible LLM backends.",
+  "theme": "luma",
+  "primaryColor": "#6366F1",
+  "lightColor": "#EEF2FF",
+  "darkColor": "#312E81",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/agents",
+              "concepts/memory",
+              "concepts/tools",
+              "concepts/prompts-personas"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/agent-studio",
+              "modules/prompt-persona-lab",
+              "modules/toolbench",
+              "modules/test-center"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker-compose",
+              "deployment/llm-backends",
+              "deployment/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": [
+              "api/agents/list",
+              "api/agents/create",
+              "api/agents/details",
+              "api/agents/messages"
+            ]
+          },
+          {
+            "group": "Platform Control",
+            "pages": [
+              "api/platform/capabilities",
+              "api/platform/system",
+              "api/platform/model",
+              "api/platform/memory",
+              "api/platform/tools"
+            ]
+          },
+          {
+            "group": "Test Runs",
+            "pages": [
+              "api/test-runs/overview",
+              "api/test-runs/artifacts"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Agent Studio with runtime chat, execution trace, and persistent state inspection",
+    "Prompt & Persona Lab for editing system prompts, personas, and human memory blocks with revision history",
+    "Toolbench for discovering, attaching, and probing tools on live agents",
+    "Test Center for orchestrating and monitoring backend checks and runner suites",
+    "Agent Platform API for runtime messaging with per-request model and system overrides",
+    "Support for multiple LLM backends: Doubao (Ark), LM Studio, and other OpenAI-compatible providers",
+    "Persistent agent memory via Letta core memory blocks (persona, human)",
+    "Docker Compose deployment with Letta server, Postgres/pgvector, and Redis"
+  ],
+  "publicApiSurface": [
+    "GET /api/v1/options",
+    "GET /api/v1/agents",
+    "POST /api/v1/agents",
+    "GET /api/v1/agents/{agent_id}/details",
+    "GET /api/v1/agents/{agent_id}/persistent_state",
+    "GET /api/v1/agents/{agent_id}/raw_prompt",
+    "POST /api/v1/chat",
+    "GET /api/v1/platform/capabilities",
+    "POST /api/v1/platform/agents/{agent_id}/messages",
+    "PATCH /api/v1/platform/agents/{agent_id}/system",
+    "PATCH /api/v1/platform/agents/{agent_id}/model",
+    "PATCH /api/v1/platform/agents/{agent_id}/core-memory/blocks/{block_label}",
+    "PATCH /api/v1/platform/agents/{agent_id}/tools/attach/{tool_id}",
+    "PATCH /api/v1/platform/agents/{agent_id}/tools/detach/{tool_id}",
+    "GET /api/v1/platform/tools",
+    "POST /api/v1/platform/tools/test-invoke",
+    "GET /api/v1/platform/metadata/prompts-personas",
+    "GET /api/v1/platform/metadata/prompts-personas/revisions",
+    "GET /api/v1/platform/test-runs",
+    "POST /api/v1/platform/test-runs",
+    "GET /api/v1/platform/test-runs/{run_id}",
+    "POST /api/v1/platform/test-runs/{run_id}/cancel",
+    "GET /api/v1/platform/test-runs/{run_id}/artifacts",
+    "GET /api/v1/platform/test-runs/{run_id}/artifacts/{artifact_id}"
+  ]
+}

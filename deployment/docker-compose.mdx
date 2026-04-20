@@ -1,0 +1,134 @@
+---
+title: "Deploy Letta Open ADE with Docker Compose"
+description: "Deploy the full Letta Open ADE stack — Letta server, Postgres, Redis, and ADE frontend — using Docker Compose in a single command."
+---
+
+Docker Compose is the recommended way to run Letta Open ADE locally or on a remote server. A single `docker compose up -d` starts every service in the correct order, with health checks ensuring each dependency is ready before the next service starts.
+
+## Services overview
+
+The compose stack runs five services:
+
+| Service | Image | Port(s) | Role |
+|---|---|---|---|
+| `letta_db` | `pgvector/pgvector:0.8.1-pg15` | 5432 | Postgres with pgvector extension |
+| `redis` | `redis:7-alpine` | — | External Redis for Letta |
+| `letta_server` | `letta/letta:0.16.7` (pinned) | 8083, 8283 | Letta API and built-in ADE UI |
+| `dev_ui` | `DEV_UI_IMAGE` | 8284 | Agent Platform API |
+| `ade_frontend` | Next.js build | 3000 | ADE frontend UI |
+
+`letta_db` and `redis` must pass their health checks before `letta_server` starts. `dev_ui` waits for `letta_server` to become healthy. `ade_frontend` depends on `dev_ui`.
+
+## Prerequisites
+
+- [Docker Desktop](https://docs.docker.com/desktop/) (Mac or Windows), or Docker Engine with the Compose plugin (Linux)
+- An LLM backend API key — see [Connect LLM and embedding backends](/deployment/llm-backends)
+
+## Setup
+
+<Steps>
+  <Step title="Copy the environment template">
+    Copy `.env.example` to `.env` in the project root:
+
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+
+  <Step title="Set your API key and backend variables">
+    Open `.env` and set at minimum:
+
+    ```bash
+    # Doubao (Ark) — replace with your actual key
+    OPENAI_API_KEY=replace_with_your_ark_api_key
+    OPENAI_API_BASE=https://ark.cn-beijing.volces.com/api/v3
+
+    # Or for LM Studio, set:
+    # LMSTUDIO_BASE_URL=http://host.docker.internal:1234
+    ```
+
+    See [Connect LLM and embedding backends](/deployment/llm-backends) for the full list of backend variables.
+  </Step>
+
+  <Step title="Start the stack">
+    ```bash
+    docker compose up -d
+    ```
+
+    Docker pulls all images on first run. Subsequent starts skip the pull and boot directly.
+  </Step>
+
+  <Step title="Check service health">
+    ```bash
+    docker compose ps
+    ```
+
+    Wait until all services show `healthy` or `running` before testing endpoints. `letta_server` has a 180-second start period; it may take a minute or two on first boot.
+  </Step>
+
+  <Step title="Verify the Agent Platform API">
+    ```bash
+    curl http://127.0.0.1:8284/api/v1/platform/capabilities
+    ```
+
+    A JSON response confirms the Agent Platform API is up and connected to the Letta server.
+  </Step>
+
+  <Step title="Open ADE">
+    - **ADE frontend:** [http://127.0.0.1:3000](http://127.0.0.1:3000)
+    - **Agent Platform API:** [http://127.0.0.1:8284](http://127.0.0.1:8284)
+    - **Letta API:** [http://127.0.0.1:8283](http://127.0.0.1:8283)
+  </Step>
+</Steps>
+
+## Starting the ADE frontend separately
+
+The `ade_frontend` service is defined with a compose profile. You can start it independently without rebuilding the rest of the stack:
+
+```bash
+docker compose --profile ade up -d ade_frontend
+```
+
+To stop only the frontend:
+
+```bash
+docker compose --profile ade stop ade_frontend
+```
+
+## Image pinning
+
+The Letta server and Agent Platform API images are controlled by environment variables so you can pin to a specific version without editing `compose.yaml`:
+
+```bash
+# .env
+LETTA_SERVER_IMAGE=letta/letta:0.16.7
+DEV_UI_IMAGE=ghcr.io/wenjun-mao/letta-doubao-dev-ui:latest
+```
+
+## Pull-first deployment (no local build)
+
+On a remote server where you want to avoid building locally, pull images first then bring the stack up:
+
+```bash
+docker compose pull letta_server dev_ui
+docker compose up -d
+```
+
+<Note>
+Avoid using `--build` on remote deployments. The prebuilt images include all dependencies pre-installed, which makes startup faster and more deterministic.
+</Note>
+
+## Data persistence
+
+Postgres data is stored in `./data/pgdata` on the host. This volume persists across `docker compose down` and `up` cycles.
+
+To start with a completely fresh database, remove the data directory before bringing the stack up:
+
+```bash
+rm -rf ./data/pgdata
+docker compose up -d
+```
+
+<Warning>
+Removing `./data/pgdata` permanently deletes all agents, memory blocks, and conversation history stored in Postgres.
+</Warning>

@@ -1,0 +1,241 @@
+---
+title: "Test run orchestration API for Letta agents"
+description: "The test-runs API lets you start, monitor, and cancel orchestrated backend checks and runner suites through the Agent Platform API."
+---
+
+The test-runs API lets you trigger and monitor backend validation suites directly through the Platform API. Each run is a supervised subprocess that executes a specific check or runner against your Letta agent environment. You create a run, poll it until it reaches a terminal state, and inspect its exit code and log output to determine whether the check passed.
+
+---
+
+## Run status lifecycle
+
+Every run moves through the following states:
+
+- **`created`** — the run record exists but the subprocess has not started yet
+- **`started`** — the subprocess is running
+- **`finished`** — the subprocess has exited; check `exit_code` (0 = success, non-zero = failure)
+
+You can request cancellation at any time. Cancelled runs still finish with an `exit_code`.
+
+---
+
+## Run types
+
+| `run_type` | What it tests |
+|---|---|
+| `agent_bootstrap_check` | Verifies that a new agent can be created and responds correctly |
+| `provider_embedding_matrix_check` | Validates all configured model and embedding provider combinations |
+| `prompt_strategy_check` | Tests prompt strategy selection and rendering across available keys |
+| `platform_api_e2e_check` | End-to-end check of the full Platform API surface |
+| `ade_mvp_smoke_e2e_check` | Smoke test for the ADE MVP feature set |
+| `platform_flag_gate_check` | Verifies capability flag gating logic at runtime |
+| `platform_dual_run_gate` | Runs the same prompt against two model configurations and compares outputs |
+| `persona_guardrail_runner` | Validates persona guardrail behavior using a config file |
+| `memory_update_runner` | Exercises core-memory update round trips for a configurable number of rounds |
+
+---
+
+## List all test runs
+
+```
+GET /api/v1/platform/test-runs
+```
+
+Returns all test run records tracked by the orchestrator, including completed and in-progress runs.
+
+### Response
+
+<ResponseField name="items" type="object[]">
+  Array of test run records. Each item has the same shape as the single-run response described below.
+</ResponseField>
+
+---
+
+## Create a test run
+
+```
+POST /api/v1/platform/test-runs
+```
+
+Creates and immediately starts a new test run subprocess.
+
+### Request body
+
+<ParamField body="run_type" type="string" required>
+  The type of test to run. Must be one of: `agent_bootstrap_check`, `provider_embedding_matrix_check`, `prompt_strategy_check`, `platform_api_e2e_check`, `ade_mvp_smoke_e2e_check`, `platform_flag_gate_check`, `platform_dual_run_gate`, `persona_guardrail_runner`, `memory_update_runner`.
+</ParamField>
+
+<ParamField body="model" type="string">
+  Model handle override for the runner. When omitted, the runner uses its default model selection.
+</ParamField>
+
+<ParamField body="embedding" type="string">
+  Embedding handle override for the runner.
+</ParamField>
+
+<ParamField body="rounds" type="integer">
+  Number of rounds to execute. Only applies to `memory_update_runner`.
+</ParamField>
+
+<ParamField body="config_path" type="string">
+  Path to a test configuration file. Only applies to `persona_guardrail_runner`.
+</ParamField>
+
+---
+
+## Get a single test run
+
+```
+GET /api/v1/platform/test-runs/{run_id}
+```
+
+Returns the current state and output for a specific run.
+
+### Path parameters
+
+<ParamField path="run_id" type="string" required>
+  The ID of the run to retrieve.
+</ParamField>
+
+### Response
+
+<ResponseField name="run_id" type="string">
+  Unique identifier for this run.
+</ResponseField>
+
+<ResponseField name="run_type" type="string">
+  The type of test that was started.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current run status: `created`, `started`, or `finished`.
+</ResponseField>
+
+<ResponseField name="command" type="string[]">
+  The full subprocess command array that was executed.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the run record was created.
+</ResponseField>
+
+<ResponseField name="started_at" type="string">
+  ISO 8601 timestamp of when the subprocess started.
+</ResponseField>
+
+<ResponseField name="finished_at" type="string">
+  ISO 8601 timestamp of when the subprocess exited.
+</ResponseField>
+
+<ResponseField name="exit_code" type="integer or null">
+  Exit code of the subprocess. `0` indicates success. `null` while the run is still in progress.
+</ResponseField>
+
+<ResponseField name="log_file" type="string">
+  Filesystem path to the full log file for this run.
+</ResponseField>
+
+<ResponseField name="cancel_requested" type="boolean">
+  Whether a cancellation was requested for this run.
+</ResponseField>
+
+<ResponseField name="output_tail" type="string[]">
+  The last several lines of log output captured from the subprocess. Useful for quick status checks without reading the full artifact.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if the run failed to start or encountered an orchestration error.
+</ResponseField>
+
+<ResponseField name="artifacts" type="object[]">
+  List of artifact records produced by this run. See [artifacts](/api/test-runs/artifacts) for full field definitions.
+</ResponseField>
+
+---
+
+## Cancel a test run
+
+```
+POST /api/v1/platform/test-runs/{run_id}/cancel
+```
+
+Requests cancellation of a running test. Returns the updated run record. The run continues until the subprocess exits — poll `status` to confirm it reaches `finished`.
+
+### Path parameters
+
+<ParamField path="run_id" type="string" required>
+  The ID of the run to cancel.
+</ParamField>
+
+---
+
+## Example: start and poll a platform API check
+
+<Steps>
+  <Step title="Start the run">
+    Create a `platform_api_e2e_check` run and capture the `run_id`.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST http://127.0.0.1:8284/api/v1/platform/test-runs \
+      -H "Content-Type: application/json" \
+      -d '{"run_type": "platform_api_e2e_check"}'
+    ```
+
+    </CodeGroup>
+
+    ```json response
+    {
+      "run_id": "run-e2e-001",
+      "run_type": "platform_api_e2e_check",
+      "status": "started",
+      "command": ["python", "-m", "pytest", "tests/platform_api_e2e.py"],
+      "created_at": "2026-04-14T10:00:00Z",
+      "started_at": "2026-04-14T10:00:00Z",
+      "finished_at": "",
+      "exit_code": null,
+      "log_file": "diagnostics/test-runs/run-e2e-001.log",
+      "cancel_requested": false,
+      "output_tail": [],
+      "error": "",
+      "artifacts": []
+    }
+    ```
+  </Step>
+
+  <Step title="Poll until finished">
+    Fetch the run record repeatedly until `status` is `"finished"`.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl http://127.0.0.1:8284/api/v1/platform/test-runs/run-e2e-001
+    ```
+
+    </CodeGroup>
+
+    ```json response
+    {
+      "run_id": "run-e2e-001",
+      "run_type": "platform_api_e2e_check",
+      "status": "finished",
+      "exit_code": 0,
+      "cancel_requested": false,
+      "output_tail": ["PASSED", "1 passed in 4.32s"],
+      "error": "",
+      "artifacts": [
+        {
+          "artifact_id": "log",
+          "type": "logs",
+          "path": "diagnostics/test-runs/run-e2e-001.log",
+          "exists": true,
+          "size_bytes": 4096
+        }
+      ]
+    }
+    ```
+  </Step>
+</Steps>
+
+An `exit_code` of `0` means the check passed. Any other value indicates a failure — read the log artifact for details.

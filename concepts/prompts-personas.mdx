@@ -1,0 +1,130 @@
+---
+title: "System prompts and personas in Letta Open ADE"
+description: "System prompts and personas control how your agent behaves and communicates. Learn how to manage them and track changes over time in ADE."
+---
+
+Two configuration surfaces control how a Letta agent speaks and what it knows about itself: the **system prompt** and the **persona memory block**. The system prompt defines the meta-instructions the model follows on every turn. The persona block defines the agent's character and speaking style. Together they determine the agent's behaviour more than any other single setting.
+
+## System prompt
+
+The system prompt is the top-level instruction text injected at the start of every turn, before memory blocks and conversation history. ADE ships two built-in prompt keys:
+
+### `custom_v2` (recommended)
+
+`custom_v2` is derived from Letta's `memgpt_v2_chat` baseline and is the default for new agents. It instructs the model to:
+
+- Fully embody its persona and never break character or acknowledge being an AI
+- Emit an inner monologue before every response
+- Use tools only when the required information is not already in context
+- Respond exclusively in Simplified Chinese (zh-CN)
+- Write pure spoken dialogue — no roleplay actions or bracketed body language
+
+```python
+# Prompt key used in AgentCreateRequest
+prompt_key = "custom_v2"
+```
+
+### `custom_v1` (alternate)
+
+`custom_v1` is an earlier baseline kept for A/B testing and regression comparison. It is structurally similar to `custom_v2` but was tuned independently. Use it when you want to compare agent behaviour across prompt strategies under identical model and memory conditions.
+
+You can preview both prompts (length, first line) via:
+
+```bash
+GET /api/v1/platform/metadata/prompts-personas
+```
+
+## Persona memory block
+
+The `persona` block in core memory defines the agent's identity — who it is, what its personality is like, and how it speaks. The default value is the `linxiaotang` persona: a 23-year-old from Suzhou, warm and conversational, who writes in natural Chinese without emojis or template phrases.
+
+The block is structured as XML-tagged sections:
+
+```xml
+<identity>
+  Background, hometown, and personal history.
+</identity>
+<personality>
+  Core character traits and conversational style.
+</personality>
+<speaking_style>
+  Rules for tone, sentence length, and language choices.
+</speaking_style>
+```
+
+You can replace this content entirely to create a different character. Because the block is persisted in Postgres and injected on every turn, changing it takes effect immediately — even mid-conversation.
+
+## Human memory block
+
+The `human` block stores what the agent has learned about the user. It starts as a blank template:
+
+```
+姓名：用户（待询问）
+年龄：未知
+关于用户的偏好与习惯：
+- 这是我们的第一次对话，暂无记录。
+```
+
+The model is instructed to update this block as it learns information — a name, age, preferences, or recurring topics. ADE surfaces the delta in a **Memory diff** panel after each chat turn so you can see exactly what the agent recorded.
+
+You can also update the human block manually via:
+
+```bash
+PATCH /api/v1/platform/agents/{agent_id}/core-memory/blocks/human
+```
+
+See [Memory blocks](/concepts/memory) for the full update API and response shape.
+
+## Revision history
+
+Every time a system prompt, persona block, or human block is updated through the ADE API, a revision record is written to `diagnostics/prompt_persona_revisions.jsonl`. Each revision contains:
+
+| Field | Description |
+|---|---|
+| `revision_id` | UUID |
+| `recorded_at` | UTC ISO-8601 timestamp |
+| `agent_id` | Agent the change applies to |
+| `field` | `system`, `persona`, or `human` |
+| `source` | API route that triggered the change |
+| `before` | Full text before the change |
+| `after` | Full text after the change |
+| `before_preview` | First 180 characters of `before` |
+| `after_preview` | First 180 characters of `after` |
+| `before_length` | Character count of `before` |
+| `after_length` | Character count of `after` |
+| `delta_length` | `after_length - before_length` |
+
+Revisions where `before == after` are not recorded.
+
+To query the revision history, call:
+
+```bash
+GET /api/v1/platform/metadata/prompts-personas/revisions
+```
+
+Query parameters:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `agent_id` | string | Filter to a specific agent |
+| `field` | string | `system`, `persona`, or `human` |
+| `limit` | integer | Maximum records returned (default `80`, max `500`) |
+
+Results are returned newest-first.
+
+## Using the Prompt & Persona Lab
+
+The **Prompt & Persona Lab** module in the ADE frontend wraps all of the above into a visual editor. From there you can:
+
+- Switch between `custom_v1` and `custom_v2` system prompts and apply the change to a live agent
+- Edit the persona block inline and see a character count and delta
+- Edit the human block to seed the agent with user context before a conversation
+- Browse the revision timeline with before/after previews for any field
+
+<Tip>
+Use `custom_v2` for all new agents. Switch to `custom_v1` only when you want to run a controlled A/B comparison — keep all other variables (model, embedding, memory blocks) identical across the two agents.
+</Tip>
+
+<Warning>
+Revisions are stored locally in `diagnostics/prompt_persona_revisions.jsonl` inside the `dev_ui` container. If you recreate the container without a volume mount for that path, the revision history will be lost. Mount the `diagnostics/` directory as a host volume if long-term audit logging matters for your deployment.
+</Warning>

@@ -1,0 +1,244 @@
+---
+title: "PATCH core-memory blocks for Letta agents"
+description: "PATCH /api/v1/platform/agents/{id}/core-memory/blocks/{label} updates a named memory block value and logs the change to revision history."
+---
+
+Core-memory blocks hold the persistent context a Letta agent carries across every conversation turn. The most common blocks are `persona` (who the agent is) and `human` (what the agent knows about the user). This page covers updating block values, reading prompt and persona metadata, and querying the full revision history for all block mutations.
+
+---
+
+## Update a core-memory block
+
+```
+PATCH /api/v1/platform/agents/{agent_id}/core-memory/blocks/{block_label}
+```
+
+### Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The ID of the agent whose memory block you want to update.
+</ParamField>
+
+<ParamField path="block_label" type="string" required>
+  The label of the memory block to update. Typically `persona` or `human`, but any block label registered on the agent is accepted.
+</ParamField>
+
+### Request body
+
+<ParamField body="value" type="string" required>
+  The new content for this memory block. Replaces the entire current value.
+</ParamField>
+
+### Response
+
+<ResponseField name="agent_id" type="string">
+  The ID of the agent that was updated.
+</ResponseField>
+
+<ResponseField name="block_label" type="string">
+  The label of the memory block that was updated.
+</ResponseField>
+
+<ResponseField name="value_before" type="string">
+  The full block content that existed before this update.
+</ResponseField>
+
+<ResponseField name="value_after" type="string">
+  The new block content now stored for this agent.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  The block's description as returned by Letta.
+</ResponseField>
+
+<ResponseField name="limit" type="integer or null">
+  The maximum character limit for this block, or `null` if no limit is set.
+</ResponseField>
+
+### Side effects
+
+For `persona` and `human` blocks, a revision record is appended to `diagnostics/prompt_persona_revisions.jsonl` whenever the new value differs from the previous one. The record includes `revision_id`, `recorded_at`, `field`, `before`, `after`, and length deltas.
+
+### Example
+
+<CodeGroup>
+
+```bash curl
+curl -X PATCH \
+  http://127.0.0.1:8284/api/v1/platform/agents/agent-abc123/core-memory/blocks/persona \
+  -H "Content-Type: application/json" \
+  -d '{
+    "value": "You are Lin Xiaotang, a warm and knowledgeable study companion."
+  }'
+```
+
+</CodeGroup>
+
+```json response
+{
+  "agent_id": "agent-abc123",
+  "block_label": "persona",
+  "value_before": "You are a helpful assistant.",
+  "value_after": "You are Lin Xiaotang, a warm and knowledgeable study companion.",
+  "description": "Core persona memory block",
+  "limit": 2000
+}
+```
+
+---
+
+## Get prompt and persona metadata
+
+```
+GET /api/v1/platform/metadata/prompts-personas
+```
+
+Returns the available system prompt options and persona definitions, along with their previews and character lengths. Use this to populate a UI selector or to confirm which prompt keys are valid before calling the system-update endpoint.
+
+### Response
+
+<ResponseField name="defaults" type="object">
+  The default prompt and persona keys in use.
+
+  <Expandable title="properties">
+    <ResponseField name="prompt_key" type="string">
+      The default system prompt key (e.g. `custom_v2`).
+    </ResponseField>
+    <ResponseField name="persona_key" type="string">
+      The default persona key.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="prompts" type="object[]">
+  List of available system prompts.
+
+  <Expandable title="properties">
+    <ResponseField name="key" type="string">
+      Unique key for this prompt (e.g. `custom_v2`).
+    </ResponseField>
+    <ResponseField name="label" type="string">
+      Human-readable label.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Short description of this prompt's purpose.
+    </ResponseField>
+    <ResponseField name="preview" type="string">
+      First non-empty line of the prompt text, truncated to 180 characters.
+    </ResponseField>
+    <ResponseField name="length" type="integer">
+      Total character count of the full prompt text.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="personas" type="object[]">
+  List of available persona definitions.
+
+  <Expandable title="properties">
+    <ResponseField name="key" type="string">
+      Unique key for this persona.
+    </ResponseField>
+    <ResponseField name="preview" type="string">
+      First non-empty line of the persona text, truncated to 180 characters.
+    </ResponseField>
+    <ResponseField name="length" type="integer">
+      Total character count of the full persona text.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## List revision history
+
+```
+GET /api/v1/platform/metadata/prompts-personas/revisions
+```
+
+Returns a reverse-chronological list of all recorded mutations to `system`, `persona`, and `human` fields across agents. Revisions are read from `diagnostics/prompt_persona_revisions.jsonl`.
+
+### Query parameters
+
+<ParamField query="agent_id" type="string">
+  Filter revisions to a specific agent. Omit to return revisions for all agents.
+</ParamField>
+
+<ParamField query="field" type="string">
+  Filter by field name. Must be one of `system`, `persona`, or `human`.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="80">
+  Maximum number of revisions to return. Capped at 500.
+</ParamField>
+
+### Response
+
+<ResponseField name="total" type="integer">
+  Number of revisions returned after applying filters.
+</ResponseField>
+
+<ResponseField name="limit" type="integer">
+  The effective limit applied to the query.
+</ResponseField>
+
+<ResponseField name="agent_id" type="string or null">
+  The agent ID filter that was applied, or `null` if none.
+</ResponseField>
+
+<ResponseField name="field" type="string or null">
+  The field filter that was applied, or `null` if none.
+</ResponseField>
+
+<ResponseField name="items" type="object[]">
+  List of revision records, most recent first.
+
+  <Expandable title="properties">
+    <ResponseField name="revision_id" type="string">
+      Unique identifier for this revision.
+    </ResponseField>
+    <ResponseField name="recorded_at" type="string">
+      ISO 8601 UTC timestamp of when the revision was recorded.
+    </ResponseField>
+    <ResponseField name="agent_id" type="string">
+      The agent this revision belongs to.
+    </ResponseField>
+    <ResponseField name="field" type="string">
+      Which field was changed: `system`, `persona`, or `human`.
+    </ResponseField>
+    <ResponseField name="source" type="string">
+      The API route that triggered this revision.
+    </ResponseField>
+    <ResponseField name="before" type="string">
+      Full text of the field before the change.
+    </ResponseField>
+    <ResponseField name="after" type="string">
+      Full text of the field after the change.
+    </ResponseField>
+    <ResponseField name="before_preview" type="string">
+      Truncated preview of the previous value.
+    </ResponseField>
+    <ResponseField name="after_preview" type="string">
+      Truncated preview of the new value.
+    </ResponseField>
+    <ResponseField name="before_length" type="integer">
+      Character count of the previous value.
+    </ResponseField>
+    <ResponseField name="after_length" type="integer">
+      Character count of the new value.
+    </ResponseField>
+    <ResponseField name="delta_length" type="integer">
+      Difference in character count: `after_length - before_length`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash curl
+curl "http://127.0.0.1:8284/api/v1/platform/metadata/prompts-personas/revisions?agent_id=agent-abc123&field=persona&limit=10"
+```
+
+</CodeGroup>

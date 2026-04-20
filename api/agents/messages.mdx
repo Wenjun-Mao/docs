@@ -1,0 +1,202 @@
+---
+title: "POST /api/v1/chat — send a message to an agent"
+description: "POST /api/v1/chat sends a user message to a Letta agent and returns the full response sequence including assistant reply and tool calls."
+---
+
+The chat endpoint sends a user message to a Letta agent and returns every step in the agent's execution: reasoning, tool calls, tool returns, and the final assistant reply. You can also use the platform runtime variant of this endpoint to override the model or system prompt on a per-request basis without permanently modifying the agent's configuration.
+
+## POST /api/v1/chat
+
+Sends a user message to a Letta agent. If the message text contains date or time keywords (in English or Chinese), the API automatically injects a runtime datetime hint in the Asia/Shanghai timezone as an override to ensure the agent answers date and time questions accurately.
+
+### Endpoint
+
+```
+POST /api/v1/chat
+```
+
+### Request body
+
+<ParamField body="agent_id" type="string" required>
+  The Letta UUID of the agent to send the message to.
+</ParamField>
+
+<ParamField body="message" type="string" required>
+  The user's message text. Plain string; no special formatting required.
+</ParamField>
+
+### Datetime detection
+
+If the message contains any of the following tokens (case-insensitive), the API injects a runtime datetime hint:
+
+- English: `today`, `date`, `time`, `current date`, `current time`, `what day`, `what time`
+- Chinese: `今天`, `日期`, `几月`, `几号`, `几日`, `星期`, `周几`, `礼拜几`, `现在几点`, `当前时间`
+
+The injected hint provides the current date and time in the `Asia/Shanghai` timezone and instructs the agent to answer directly without disclaiming that it cannot access a calendar.
+
+### Response
+
+<ResponseField name="total_steps" type="integer" required>
+  Total number of execution steps returned in `sequence`.
+</ResponseField>
+
+<ResponseField name="sequence" type="object[]" required>
+  Ordered list of execution steps. Each step has the following fields:
+
+  <Expandable title="step fields">
+    <ResponseField name="type" type="string" required>
+      Step type. One of:
+      - `assistant_message` — the agent's outward reply to the user.
+      - `tool_call_message` — the agent invoking a tool.
+      - `tool_return_message` — the result returned by a tool.
+      - `reasoning_message` — internal reasoning or scratchpad text.
+    </ResponseField>
+    <ResponseField name="content" type="string">
+      Text content of the step. For `tool_return_message`, this is the tool's return value. For `reasoning_message`, this is the reasoning text.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Tool name for `tool_call_message` steps. `null` for other step types.
+    </ResponseField>
+    <ResponseField name="arguments" type="string">
+      Serialized tool call arguments for `tool_call_message` steps. `null` for other step types.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="memory_diff" type="object" required>
+  Captures changes to the agent's human memory block during this turn. Contains `old` and `new` values when the memory was updated, or an empty object if no memory update occurred.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash Request
+curl -X POST http://127.0.0.1:8284/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agent-uuid-a1b2c3",
+    "message": "Hi! What can you help me with today?"
+  }'
+```
+
+```json Response
+{
+  "total_steps": 3,
+  "sequence": [
+    {
+      "type": "reasoning_message",
+      "content": "The user is greeting me and asking what I can do. I should respond warmly and describe my capabilities.",
+      "name": null,
+      "arguments": null
+    },
+    {
+      "type": "tool_call_message",
+      "content": "",
+      "name": "send_message",
+      "arguments": "{\"message\": \"Hello! I'm Lin Xiaotang. I can help you with questions, planning, research, and conversation. What would you like to do?\"}"
+    },
+    {
+      "type": "assistant_message",
+      "content": "Hello! I'm Lin Xiaotang. I can help you with questions, planning, research, and conversation. What would you like to do?",
+      "name": null,
+      "arguments": null
+    }
+  ],
+  "memory_diff": {}
+}
+```
+
+</CodeGroup>
+
+---
+
+## POST /api/v1/platform/agents/:agent_id/messages
+
+The platform runtime variant of the chat endpoint. It accepts the same message input but adds optional per-request overrides for the model and system prompt. These overrides apply only to this single request and do not persist to the agent's stored configuration.
+
+### Endpoint
+
+```
+POST /api/v1/platform/agents/{agent_id}/messages
+```
+
+### Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The Letta UUID of the agent.
+</ParamField>
+
+### Request body
+
+<ParamField body="input" type="string" required>
+  The user's message text.
+</ParamField>
+
+<ParamField body="override_model" type="string">
+  Model handle to use for this request only. If the Letta server supports per-request model overrides, the agent uses this model instead of its configured model for this turn. Omit to use the agent's stored model.
+</ParamField>
+
+<ParamField body="override_system" type="string">
+  System prompt text to use for this request only. Overrides the agent's persisted system prompt for this turn. Omit to use the agent's stored system prompt.
+</ParamField>
+
+### Response
+
+<ResponseField name="agent_id" type="string" required>
+  The agent UUID the message was sent to.
+</ResponseField>
+
+<ResponseField name="override_model" type="string">
+  The model override applied, if any. `null` if no model override was provided.
+</ResponseField>
+
+<ResponseField name="override_system" type="string">
+  The system prompt override applied, if any. `null` if no system override was provided.
+</ResponseField>
+
+<ResponseField name="result" type="object" required>
+  The full response payload from the Letta agent platform service. Contains the same `sequence`, `total_steps`, and `memory_diff` structure as the `/api/v1/chat` response, nested under the `result` key.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash Request
+curl -X POST http://127.0.0.1:8284/api/v1/platform/agents/agent-uuid-a1b2c3/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Summarize who you are in one sentence.",
+    "override_model": "openai-proxy/doubao-seed-1-8-251228",
+    "override_system": "You are a concise assistant. Keep all replies to one sentence."
+  }'
+```
+
+```json Response
+{
+  "agent_id": "agent-uuid-a1b2c3",
+  "override_model": "openai-proxy/doubao-seed-1-8-251228",
+  "override_system": "You are a concise assistant. Keep all replies to one sentence.",
+  "result": {
+    "total_steps": 2,
+    "sequence": [
+      {
+        "type": "tool_call_message",
+        "content": "",
+        "name": "send_message",
+        "arguments": "{\"message\": \"I'm an AI assistant here to help you with questions and tasks.\"}"
+      },
+      {
+        "type": "assistant_message",
+        "content": "I'm an AI assistant here to help you with questions and tasks.",
+        "name": null,
+        "arguments": null
+      }
+    ],
+    "memory_diff": {}
+  }
+}
+```
+
+</CodeGroup>

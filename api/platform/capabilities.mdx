@@ -1,0 +1,133 @@
+---
+title: "GET /api/v1/platform/capabilities"
+description: "GET /api/v1/platform/capabilities reports which Letta SDK features are available at runtime, including model override and memory control."
+---
+
+The capabilities endpoint gives you a snapshot of every SDK feature the running Letta server supports. Call it at startup to verify your environment, or at any time to check whether a specific control or runtime ability is currently reachable. When `strict_mode` is enabled, the server refuses to start if any entry in `missing_required` is non-empty.
+
+## Endpoint
+
+```
+GET /api/v1/platform/capabilities
+```
+
+No parameters are required.
+
+## Response
+
+<ResponseField name="enabled" type="boolean">
+  Whether the Platform API is active. Controlled by the `AGENT_PLATFORM_API_ENABLED` environment variable.
+</ResponseField>
+
+<ResponseField name="strict_mode" type="boolean">
+  Whether strict capability checking is enforced. When `true`, the server raises an error at startup if any required capability is missing.
+</ResponseField>
+
+<ResponseField name="missing_required" type="string[]">
+  List of required capabilities that are not currently available. An empty array means all required capabilities are met. If `strict_mode` is `true` and this list is non-empty, the API will refuse to start.
+</ResponseField>
+
+<ResponseField name="runtime" type="object">
+  Runtime per-request capabilities detected from the connected Letta SDK.
+
+  <Expandable title="properties">
+    <ResponseField name="per_request_model_override" type="boolean">
+      Whether the SDK supports overriding the model on a per-request basis.
+    </ResponseField>
+    <ResponseField name="per_request_model_override_via_extra_body" type="boolean">
+      Whether per-request model override is achievable through the `extra_body` parameter.
+    </ResponseField>
+    <ResponseField name="per_request_system_override" type="boolean">
+      Whether the SDK supports overriding the system prompt on a per-request basis.
+    </ResponseField>
+    <ResponseField name="per_request_system_override_via_extra_body" type="boolean">
+      Whether per-request system override is achievable through the `extra_body` parameter.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="control" type="object">
+  Persistent agent control capabilities — operations that mutate stored agent state.
+
+  <Expandable title="properties">
+    <ResponseField name="update_system_prompt" type="boolean">
+      Whether you can update an agent's persisted system prompt.
+    </ResponseField>
+    <ResponseField name="update_agent_model" type="boolean">
+      Whether you can change the persisted default LLM model for an agent.
+    </ResponseField>
+    <ResponseField name="update_core_memory_block" type="boolean">
+      Whether you can update the value of a core-memory block.
+    </ResponseField>
+    <ResponseField name="attach_tool" type="boolean">
+      Whether you can attach a tool to an agent.
+    </ResponseField>
+    <ResponseField name="detach_tool" type="boolean">
+      Whether you can detach a tool from an agent.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sdk" type="object">
+  Introspected SDK parameter lists. Useful for programmatic capability negotiation.
+
+  <Expandable title="properties">
+    <ResponseField name="messages_create_params" type="string[]">
+      Parameter names accepted by the SDK's messages create method.
+    </ResponseField>
+    <ResponseField name="agents_update_params" type="string[]">
+      Parameter names accepted by the SDK's agents update method.
+    </ResponseField>
+    <ResponseField name="blocks_update_params" type="string[]">
+      Parameter names accepted by the SDK's blocks update method.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Understanding `missing_required`
+
+The `missing_required` array lists capability paths the Platform API considers mandatory. If `strict_mode` is on and this list is non-empty when the server starts, the process exits immediately with an error. The checked paths are:
+
+- `runtime.per_request_model_override` — at least one of `per_request_model_override` or `per_request_model_override_via_extra_body` must be `true`
+- `control.update_system_prompt`
+- `control.update_core_memory_block`
+- `control.attach_tool`
+- `control.detach_tool`
+
+You can use this endpoint to gate feature flags in your own code without duplicating the same logic.
+
+## Example
+
+<CodeGroup>
+
+```bash curl
+curl http://127.0.0.1:8284/api/v1/platform/capabilities
+```
+
+</CodeGroup>
+
+```json response
+{
+  "enabled": true,
+  "strict_mode": false,
+  "missing_required": [],
+  "runtime": {
+    "per_request_model_override": true,
+    "per_request_model_override_via_extra_body": false,
+    "per_request_system_override": true,
+    "per_request_system_override_via_extra_body": false
+  },
+  "control": {
+    "update_system_prompt": true,
+    "update_agent_model": true,
+    "update_core_memory_block": true,
+    "attach_tool": true,
+    "detach_tool": true
+  },
+  "sdk": {
+    "messages_create_params": ["agent_id", "messages", "model", "stream"],
+    "agents_update_params": ["agent_id", "model", "system"],
+    "blocks_update_params": ["block_id", "value", "limit"]
+  }
+}
+```

@@ -1,0 +1,121 @@
+---
+title: "Agent memory blocks: persona, human, and core memory"
+description: "Letta agents store persistent context in typed memory blocks. Learn how persona and human blocks shape agent behavior and how to update them."
+---
+
+Every Letta agent has a set of core memory blocks — named text containers that are always present in the agent's context window. Unlike conversation history, which grows and may be truncated, memory blocks have a fixed size limit and are injected verbatim into the system context on every turn. This means the agent always has access to them, without needing to search recall memory.
+
+## What a memory block is
+
+A memory block has four fields:
+
+| Field | Description |
+|---|---|
+| `label` | The name of the block, for example `persona` or `human` |
+| `value` | The text content the agent reads |
+| `description` | A hint to the model about how to use the block |
+| `limit` | Maximum character length of `value` |
+
+You can retrieve all memory blocks for an agent via `GET /api/v1/agents/{agent_id}/persistent_state` (look for the `memory_blocks` array in the response).
+
+## The two default blocks
+
+Every agent created through ADE is initialised with two memory blocks.
+
+### `persona`
+
+The `persona` block defines the agent's identity and personality. It is the primary driver of how the agent speaks, what it knows about itself, and how it behaves in conversation.
+
+The default value uses the `linxiaotang` persona — a 23-year-old from Suzhou with a background in visual design and a warm, conversational style. The persona is written in Simplified Chinese and instructs the agent to communicate naturally without revealing its AI nature.
+
+```
+label:       persona
+description: <set by Letta>
+value:       <identity, personality, and speaking_style sections in Chinese>
+```
+
+You can replace this value entirely to change the agent's character, or A/B test multiple personas by creating separate agents.
+
+### `human`
+
+The `human` block stores what the agent knows about the person it is talking to. It starts as a blank template:
+
+```
+姓名：用户（待询问）
+年龄：未知
+关于用户的偏好与习惯：
+- 这是我们的第一次对话，暂无记录。
+- 等待在接下来的聊天中互相了解。
+```
+
+As the conversation progresses, the Letta model updates this block autonomously — adding the user's name, preferences, and other details it learns. ADE shows you exactly what changed after each turn in the **Memory diff** panel.
+
+## How memory persists across conversations
+
+All memory block values are stored in Postgres by the Letta server. When you start a new conversation with an existing agent, Letta loads the current block values from the database and injects them into the context. The agent picks up exactly where it left off, even after a container restart.
+
+This is what distinguishes Letta agents from stateless chat completions: the model can modify its own memory blocks during a turn (using Letta's built-in memory tools), and those modifications are committed to Postgres before the response is returned to you.
+
+## How memory fits in the context window
+
+On every turn, Letta assembles the agent's full context in this order:
+
+1. The system prompt (`custom_v1` or `custom_v2` text)
+2. Core memory blocks (all `label: value` pairs, injected as part of the system context)
+3. Recent conversation history (as many messages as fit within `context_window_limit`)
+
+The default `context_window_limit` is `16384` tokens. Memory blocks count against this budget, so keeping block values concise leaves more room for conversation history.
+
+## Updating memory blocks via the API
+
+To update a memory block programmatically, send a `PATCH` request:
+
+```bash
+curl -X PATCH http://127.0.0.1:8284/api/v1/platform/agents/{agent_id}/core-memory/blocks/human \
+  -H "Content-Type: application/json" \
+  -d '{"value": "姓名：张伟\n年龄：28\n关于用户的偏好与习惯：\n- 喜欢咖啡和编程。"}'
+```
+
+The response includes the before and after values so you can confirm the change:
+
+```json
+{
+  "agent_id": "agent-abc123",
+  "block_label": "human",
+  "value_before": "姓名：用户（待询问）...",
+  "value_after": "姓名：张伟\n年龄：28...",
+  "description": "...",
+  "limit": 5000
+}
+```
+
+You can update any block by replacing `human` in the path with the target block's `label`. The same endpoint works for `persona` and any custom blocks attached to the agent.
+
+## Revision tracking
+
+Every time you update a `persona` or `human` block through the ADE API, a revision record is appended to `diagnostics/prompt_persona_revisions.jsonl`. Each record contains:
+
+| Field | Description |
+|---|---|
+| `revision_id` | UUID generated at write time |
+| `recorded_at` | UTC ISO-8601 timestamp |
+| `agent_id` | ID of the agent whose block changed |
+| `field` | `persona` or `human` |
+| `source` | API route that triggered the change |
+| `before` | Full text before the update |
+| `after` | Full text after the update |
+| `before_preview` | First 180 characters of `before` |
+| `after_preview` | First 180 characters of `after` |
+| `delta_length` | `len(after) - len(before)` |
+
+Retrieve the revision history for a specific agent and field via:
+
+```bash
+GET /api/v1/platform/metadata/prompts-personas/revisions?agent_id={agent_id}&field=human
+```
+
+The ADE **Prompt & Persona Lab** module surfaces this history as a visual timeline with before/after previews.
+
+<Note>
+Revisions are only recorded for `persona` and `human` blocks. Changes to the system prompt are tracked separately under `field: system` when you call `PATCH /api/v1/platform/agents/{agent_id}/system`.
+</Note>

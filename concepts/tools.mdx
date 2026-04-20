@@ -1,0 +1,157 @@
+---
+title: "Tools: extending agent capabilities in ADE"
+description: "Letta agents use tools to perform actions beyond chat. Learn how to discover, attach, and detach tools from agents in Letta Open ADE."
+---
+
+Tools are named functions that a Letta agent can call during a conversation turn. When the model decides a tool is needed to answer the user's request, it emits a tool-call message, Letta executes the function, and the result is fed back into the context before the model generates its final reply. ADE's Toolbench module gives you a UI for discovering, attaching, detaching, and probing tools without writing any code.
+
+## What a tool is
+
+Each tool registered with the Letta server has the following fields:
+
+| Field | Description |
+|---|---|
+| `id` | Unique identifier |
+| `name` | Function name the model uses to call the tool |
+| `description` | Text the model reads to understand when to call the tool |
+| `tool_type` | Category string set by Letta (for example `letta_core`) |
+| `source_type` | How the tool was registered (for example `python`) |
+| `tags` | List of string labels for filtering in Toolbench |
+| `created_at` | ISO-8601 creation timestamp |
+| `last_updated_at` | ISO-8601 last-updated timestamp |
+
+## How Letta decides to call a tool
+
+The agent's `tool_rules` field constrains when the model may call tools and in what order. Letta evaluates these rules before passing the tool list to the model. If an agent has no custom `tool_rules`, the model follows its own judgment based on the tool descriptions and the conversation context.
+
+You can inspect the active `tool_rules` for any agent via `GET /api/v1/agents/{agent_id}/details` — the field is serialised as JSON in the response.
+
+## Discovering available tools
+
+To list all tools registered on the Letta server, call:
+
+```bash
+GET /api/v1/platform/tools
+```
+
+Optional query parameters:
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `search` | string | `""` | Filter by name or description substring |
+| `limit` | integer | `100` | Maximum number of results (capped at 500) |
+| `agent_id` | string | _(none)_ | When provided, each tool includes `attached_to_agent: true/false` |
+
+Example — list tools with attachment status for a specific agent:
+
+```bash
+curl "http://127.0.0.1:8284/api/v1/platform/tools?agent_id=agent-abc123&limit=50"
+```
+
+Response shape:
+
+```json
+{
+  "total": 12,
+  "search": "",
+  "limit": 50,
+  "agent_id": "agent-abc123",
+  "items": [
+    {
+      "id": "tool-xyz",
+      "name": "archival_memory_search",
+      "description": "Search archival memory for information...",
+      "tool_type": "letta_core",
+      "source_type": "python",
+      "tags": ["memory"],
+      "attached_to_agent": true,
+      "created_at": "2025-01-01T00:00:00Z",
+      "last_updated_at": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+## Attaching and detaching tools
+
+You attach or detach a tool from an agent using its `tool_id`. Both operations return a before/after count so you can confirm the change.
+
+**Attach a tool:**
+
+```bash
+PATCH /api/v1/platform/agents/{agent_id}/tools/attach/{tool_id}
+```
+
+**Detach a tool:**
+
+```bash
+PATCH /api/v1/platform/agents/{agent_id}/tools/detach/{tool_id}
+```
+
+Both endpoints return the same response shape:
+
+```json
+{
+  "agent_id": "agent-abc123",
+  "tool_id": "tool-xyz",
+  "tool_was_attached": false,
+  "tool_is_attached": true,
+  "tool_count_before": 4,
+  "tool_count_after": 5
+}
+```
+
+`tool_was_attached` reflects the state before the operation; `tool_is_attached` reflects the state after.
+
+<Note>
+Attaching a tool that is already attached is idempotent — Letta does not raise an error, and `tool_was_attached` will be `true`.
+</Note>
+
+## Tool probing
+
+Tool probing lets you send a test message to an agent and verify that the model calls the tool you expect. This is useful for validating that a newly attached tool is discovered correctly.
+
+```bash
+POST /api/v1/platform/tools/test-invoke
+```
+
+Request body:
+
+```json
+{
+  "agent_id": "agent-abc123",
+  "input": "Search my memory for anything about coffee.",
+  "expected_tool_name": "archival_memory_search",
+  "override_model": null,
+  "override_system": null
+}
+```
+
+Response:
+
+```json
+{
+  "agent_id": "agent-abc123",
+  "input": "Search my memory for anything about coffee.",
+  "expected_tool_name": "archival_memory_search",
+  "expected_tool_matched": true,
+  "tool_call_count": 1,
+  "tool_return_count": 1,
+  "result": { ... }
+}
+```
+
+`expected_tool_matched` is `true` if at least one tool call in the response matches the `expected_tool_name` you supplied (case-insensitive). If `expected_tool_name` is omitted, `expected_tool_matched` is `null`.
+
+## Tool calls in the execution trace
+
+When you chat with an agent in Agent Studio, ADE renders the full execution sequence for each turn. Tool interactions appear as two distinct steps:
+
+- **tool_call** — the model's request to invoke a function, including the function name and serialised arguments
+- **tool_return** — the result returned from the function, fed back into the model's context before the final assistant message
+
+This trace is available in the `sequence` array of any `POST /api/v1/platform/agents/{agent_id}/messages` response.
+
+<Tip>
+In Toolbench you can attach tools, run a probe message, and see the full tool-call trace side by side — all without leaving the browser. Use this to iterate quickly on tool configurations before running a full persona guardrail test suite.
+</Tip>

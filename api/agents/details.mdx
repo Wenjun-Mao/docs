@@ -1,0 +1,375 @@
+---
+title: "Agent details, persistent state, and raw prompt"
+description: "Retrieve full agent config, persistent backend state, and raw prompt context using the three GET sub-routes under /api/v1/agents/:agent_id."
+---
+
+Two endpoints give you deep visibility into an agent's current state: `details` returns the live configuration as Letta knows it, while `persistent_state` returns a structured snapshot of everything stored in Letta's backend — memory blocks, attached tools, and the full persisted conversation history.
+
+## GET /api/v1/agents/:agent_id/details
+
+Returns the complete configuration of a single agent, including its LLM config, embedding config, tool rules, attached tools, memory block values, and the active system prompt.
+
+### Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The Letta UUID of the agent to retrieve.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string" required>
+  Letta agent UUID.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Display name of the agent.
+</ResponseField>
+
+<ResponseField name="agent_type" type="string" required>
+  Agent type string as reported by the Letta server (for example, `"memgpt_agent"`).
+</ResponseField>
+
+<ResponseField name="model" type="string" required>
+  Model handle the agent is currently configured to use.
+</ResponseField>
+
+<ResponseField name="embedding" type="string">
+  Embedding handle. `null` if no embedding is configured.
+</ResponseField>
+
+<ResponseField name="llm_config" type="object">
+  Full LLM configuration object as returned by the Letta server. Shape varies by provider; serialized to JSON-compatible form.
+</ResponseField>
+
+<ResponseField name="embedding_config" type="object">
+  Embedding configuration object from the Letta server. `null` if not configured.
+</ResponseField>
+
+<ResponseField name="tool_rules" type="object">
+  Tool rule configuration from the Letta server. `null` if no tool rules are set.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Agent description. `null` if not set.
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  ISO 8601 timestamp of agent creation.
+</ResponseField>
+
+<ResponseField name="last_updated_at" type="string" required>
+  ISO 8601 timestamp of the most recent configuration update.
+</ResponseField>
+
+<ResponseField name="last_interaction_at" type="string" required>
+  ISO 8601 timestamp of the most recent non-system message. Falls back to `last_updated_at` when no messages exist.
+</ResponseField>
+
+<ResponseField name="context_window_limit" type="integer">
+  Maximum token context window for the agent. `null` if not set explicitly.
+</ResponseField>
+
+<ResponseField name="tools" type="object" required>
+  Map of tool name to description for every tool currently attached to the agent. For example: `{"send_message": "Sends a message to the user."}`.
+</ResponseField>
+
+<ResponseField name="system" type="string" required>
+  The active system prompt text stored on the agent.
+</ResponseField>
+
+<ResponseField name="memory" type="object" required>
+  Map of memory block label to current block value. For example: `{"persona": "...", "human": "..."}`.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash Request
+curl http://127.0.0.1:8284/api/v1/agents/agent-uuid-a1b2c3/details
+```
+
+```json Response
+{
+  "id": "agent-uuid-a1b2c3",
+  "name": "dev-agent",
+  "agent_type": "memgpt_agent",
+  "model": "lmstudio_openai/qwen3.5-27b",
+  "embedding": "lmstudio_openai/text-embedding-qwen3-embedding-0.6b",
+  "llm_config": {
+    "model": "qwen3.5-27b",
+    "model_endpoint_type": "openai",
+    "model_endpoint": "http://localhost:1234/v1",
+    "context_window": 16384
+  },
+  "embedding_config": {
+    "embedding_model": "text-embedding-qwen3-embedding-0.6b",
+    "embedding_endpoint_type": "openai",
+    "embedding_endpoint": "http://localhost:1234/v1",
+    "embedding_dim": 1024
+  },
+  "tool_rules": null,
+  "description": null,
+  "created_at": "2025-04-10T08:00:00+00:00",
+  "last_updated_at": "2025-04-14T11:30:00+00:00",
+  "last_interaction_at": "2025-04-14T11:30:00+00:00",
+  "context_window_limit": 16384,
+  "tools": {
+    "send_message": "Sends a message to the user.",
+    "core_memory_replace": "Replace the contents of core memory."
+  },
+  "system": "You are a helpful AI assistant...",
+  "memory": {
+    "persona": "My name is Lin Xiaotang...",
+    "human": "The user's name is unknown."
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## GET /api/v1/agents/:agent_id/persistent_state
+
+Returns a structured snapshot of the agent's full persisted state from Letta's backend storage, including the agent summary, all memory blocks with metadata, attached tools, and the most recent conversation history items.
+
+### Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The Letta UUID of the agent.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="limit" type="integer" default="120">
+  Maximum number of conversation history items to include. Must be between `1` and `500`. The total number of persisted messages is always reported in `conversation_history.total_persisted`, even if fewer items are returned.
+</ParamField>
+
+<ParamField query="include_system" type="boolean" default="false">
+  When `false`, system messages are excluded from both the history items and the `counts_by_type` map. Set to `true` to include them.
+</ParamField>
+
+### Response
+
+<ResponseField name="source" type="string" required>
+  Always `"letta_backend_persistent_storage"`.
+</ResponseField>
+
+<ResponseField name="agent" type="object" required>
+  Summary of the agent's persisted metadata.
+
+  <Expandable title="agent fields">
+    <ResponseField name="id" type="string" required>Letta agent UUID.</ResponseField>
+    <ResponseField name="name" type="string" required>Agent display name.</ResponseField>
+    <ResponseField name="agent_type" type="string" required>Agent type string.</ResponseField>
+    <ResponseField name="model" type="string" required>Model handle.</ResponseField>
+    <ResponseField name="embedding" type="string">Embedding handle. `null` if not set.</ResponseField>
+    <ResponseField name="created_at" type="string" required>ISO 8601 creation timestamp.</ResponseField>
+    <ResponseField name="last_updated_at" type="string" required>ISO 8601 last-updated timestamp.</ResponseField>
+    <ResponseField name="context_window_limit" type="integer">Context window token limit. `null` if not set.</ResponseField>
+    <ResponseField name="tool_rules" type="string" required>Tool rules serialized to string form.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="memory_blocks" type="object[]" required>
+  All memory blocks attached to the agent.
+
+  <Expandable title="memory block fields">
+    <ResponseField name="label" type="string" required>Block label (for example, `"persona"` or `"human"`).</ResponseField>
+    <ResponseField name="description" type="string" required>Human-readable description of the block's purpose.</ResponseField>
+    <ResponseField name="limit" type="integer">Maximum character limit for this block. `null` if not set.</ResponseField>
+    <ResponseField name="value" type="string" required>Current text content of the block.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="tools" type="object[]" required>
+  Tools currently attached to the agent.
+
+  <Expandable title="tool fields">
+    <ResponseField name="id" type="string" required>Letta tool UUID.</ResponseField>
+    <ResponseField name="name" type="string" required>Tool name.</ResponseField>
+    <ResponseField name="description" type="string" required>Tool description.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="conversation_history" type="object" required>
+  Conversation history summary and message items.
+
+  <Expandable title="conversation history fields">
+    <ResponseField name="total_persisted" type="integer" required>
+      Total number of messages in the filtered history (after applying `include_system`). This is the count before the `limit` is applied.
+    </ResponseField>
+    <ResponseField name="displayed" type="integer" required>
+      Number of message items included in the `items` array (at most `limit`).
+    </ResponseField>
+    <ResponseField name="limit" type="integer" required>
+      The `limit` value used for this request.
+    </ResponseField>
+    <ResponseField name="counts_by_type" type="object" required>
+      Map of message type to count. For example: `{"assistant_message": 12, "tool_call_message": 8, "tool_return_message": 8, "reasoning_message": 4}`.
+    </ResponseField>
+    <ResponseField name="items" type="object[]" required>
+      The most recent `displayed` messages, each with the following fields.
+
+      <Expandable title="message item fields">
+        <ResponseField name="id" type="string" required>Message UUID.</ResponseField>
+        <ResponseField name="created_at" type="string" required>ISO 8601 timestamp of message creation.</ResponseField>
+        <ResponseField name="message_type" type="string" required>
+          Type of message. One of: `assistant_message`, `tool_call_message`, `tool_return_message`, `reasoning_message`, `system_message`, `user_message`.
+        </ResponseField>
+        <ResponseField name="role" type="string" required>
+          Role of the message author. Falls back to `message_type` if role is not set by the Letta server.
+        </ResponseField>
+        <ResponseField name="status" type="string" required>
+          Message status string from the Letta server.
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Tool name for `tool_call_message` entries. `null` for other message types.
+        </ResponseField>
+        <ResponseField name="tool_arguments" type="string">
+          Serialized tool call arguments for `tool_call_message` entries. `null` for other message types.
+        </ResponseField>
+        <ResponseField name="content" type="string" required>
+          Text content of the message. For reasoning messages this is the reasoning text; for tool return messages this is the return value.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash Request
+curl "http://127.0.0.1:8284/api/v1/agents/agent-uuid-a1b2c3/persistent_state?limit=2&include_system=false"
+```
+
+```json Response
+{
+  "source": "letta_backend_persistent_storage",
+  "agent": {
+    "id": "agent-uuid-a1b2c3",
+    "name": "dev-agent",
+    "agent_type": "memgpt_agent",
+    "model": "lmstudio_openai/qwen3.5-27b",
+    "embedding": "lmstudio_openai/text-embedding-qwen3-embedding-0.6b",
+    "created_at": "2025-04-10T08:00:00+00:00",
+    "last_updated_at": "2025-04-14T11:30:00+00:00",
+    "context_window_limit": 16384,
+    "tool_rules": "[]"
+  },
+  "memory_blocks": [
+    {
+      "label": "persona",
+      "description": "Persona identity block",
+      "limit": 2000,
+      "value": "My name is Lin Xiaotang..."
+    },
+    {
+      "label": "human",
+      "description": "Information about the user",
+      "limit": 2000,
+      "value": "The user's name is unknown."
+    }
+  ],
+  "tools": [
+    {
+      "id": "tool-uuid-001",
+      "name": "send_message",
+      "description": "Sends a message to the user."
+    }
+  ],
+  "conversation_history": {
+    "total_persisted": 6,
+    "displayed": 2,
+    "limit": 2,
+    "counts_by_type": {
+      "assistant_message": 2,
+      "tool_call_message": 2,
+      "tool_return_message": 2
+    },
+    "items": [
+      {
+        "id": "msg-uuid-005",
+        "created_at": "2025-04-14T11:29:50+00:00",
+        "message_type": "tool_call_message",
+        "role": "tool_call_message",
+        "status": "success",
+        "name": "send_message",
+        "tool_arguments": "{\"message\": \"Hello! How can I help you today?\"}",
+        "content": ""
+      },
+      {
+        "id": "msg-uuid-006",
+        "created_at": "2025-04-14T11:30:00+00:00",
+        "message_type": "assistant_message",
+        "role": "assistant",
+        "status": "success",
+        "name": null,
+        "tool_arguments": null,
+        "content": "Hello! How can I help you today?"
+      }
+    ]
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## GET /api/v1/agents/:agent_id/raw_prompt
+
+Returns the last 10 messages that were sent to the LLM as a formatted prompt array. Use this to verify exactly what context the agent received on its most recent turns, including the role assignments and content for each message.
+
+### Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The Letta UUID of the agent.
+</ParamField>
+
+### Response
+
+<ResponseField name="messages" type="object[]" required>
+  Ordered list of the 10 most recent messages.
+
+  <Expandable title="message fields">
+    <ResponseField name="role" type="string" required>
+      Role of the message: `system`, `user`, `assistant`, or the Letta message type string as fallback.
+    </ResponseField>
+    <ResponseField name="content" type="string" required>
+      The full text content of the message as sent to the LLM.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash Request
+curl http://127.0.0.1:8284/api/v1/agents/agent-uuid-a1b2c3/raw_prompt
+```
+
+```json Response
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are Lin Xiaotang..."
+    },
+    {
+      "role": "user",
+      "content": "Hi! What can you help me with today?"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! I am here to help with questions, planning, and conversation."
+    }
+  ]
+}
+```
+
+</CodeGroup>

@@ -1,0 +1,101 @@
+---
+title: "Toolbench: discover and manage agent tools"
+description: "Toolbench gives you a searchable catalog of all available Letta tools, with attach/detach controls and a live tool-call probe for validation."
+---
+
+Toolbench was a standalone module in earlier versions of Letta Open ADE. It is now consolidated into Agent Studio. Navigating to `/toolbench` redirects you automatically to the **Tools** tab of the Agent Studio inspector. All tool management and probing functionality described below lives there.
+
+<Note>
+  If you have bookmarks or scripts pointing to `/toolbench`, update them to `/agent-studio?focus=tools`. The old route redirects automatically, but the redirect is client-side and may not work in non-browser contexts.
+</Note>
+
+## What Toolbench does
+
+The Tools tab in the Agent Studio inspector lists every tool registered on the connected Letta server. You can search the catalog, attach or detach tools from the currently selected agent, inspect full tool metadata, and run a live probe to verify that a tool is invoked as expected.
+
+## Tool catalog
+
+The catalog shows all tools returned by the Letta server for the selected agent. Tools are sorted so that attached tools appear first, then unattached tools. Within each group they are sorted alphabetically by name.
+
+### Tool card
+
+Each card in the catalog displays:
+
+- **Name** — the tool identifier used in tool calls
+- **Description** — a truncated summary (up to 190 characters)
+- **Attach / Detach** button — toggles the tool's attachment to the currently selected agent
+- **View details** link — opens the tool detail modal
+
+### Attaching and detaching tools
+
+<Steps>
+  <Step title="Select an agent">
+    Use the **Existing agents** dropdown in the Inspector panel to choose the agent you want to modify.
+  </Step>
+  <Step title="Open the Tools tab">
+    Click the **Tools** tab in the Inspector panel.
+  </Step>
+  <Step title="Toggle attachment">
+    Click **Attach** on an unattached tool to add it to the agent, or **Detach** to remove it. The catalog refreshes automatically after each change.
+  </Step>
+</Steps>
+
+<Warning>
+  Attaching or detaching a tool affects the agent's `tool_rules` and changes which tools the agent can call on the next turn. Review the agent's tool rules in the **Model** tab or the **Summary** tab of the Persistent State panel after making changes.
+</Warning>
+
+### Searching tools
+
+Type a keyword in the search field at the top of the Tools tab to filter the catalog. The search is sent to the backend and matches against tool names and descriptions.
+
+## Tool detail view
+
+Click **View details** on any tool card to open the detail modal. It shows:
+
+| Field | Description |
+|---|---|
+| Name | The tool identifier |
+| Attachment status | Whether the tool is currently attached to the selected agent |
+| Tool type | The tool's type as reported by the Letta server |
+| Source type | Where the tool originates (for example `python`, `custom`) |
+| Overview | Full description text |
+| Examples | Example prompts parsed from the description, if present |
+
+Press **Esc** or click outside the modal to close it.
+
+## Tool Probe
+
+The Tool Probe sends a live message to the selected agent and reports which tools were called. Use it to verify that attaching a tool actually causes the agent to invoke it under realistic conditions.
+
+<Steps>
+  <Step title="Enter probe input">
+    Type a message in the **Probe input** field. The field defaults to a generic prompt asking the agent whether to call a tool.
+  </Step>
+  <Step title="Set an expected tool name (optional)">
+    Enter a tool name in the **Expected tool name** field (for example `search_documents`) if you want to assert that a specific tool was called.
+  </Step>
+  <Step title="Run the probe">
+    Click **Run Tool Probe**. The result block shows the following fields:
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `tool_call_count` | integer | Total number of `tool_call` steps in the response sequence. |
+    | `tool_return_count` | integer | Total number of `tool_return` steps in the response sequence. |
+    | `expected_tool_name` | string or `(none)` | The tool name you provided, if any. |
+    | `expected_tool_matched` | boolean or `null` | `true` if any tool call matched the expected name; `false` if not; `null` if no expected name was given. |
+  </Step>
+</Steps>
+
+<Tip>
+  A `tool_call_count` of `0` after attaching a tool usually means the probe message did not trigger a tool-calling decision. Try a more specific message that clearly requires the tool's capability.
+</Tip>
+
+<Warning>
+  The Tool Probe sends a real message to the agent and is recorded in its conversation history. Use a dedicated test agent to avoid polluting the state of a production agent.
+</Warning>
+
+## How tool attachment affects agent behavior
+
+When you attach a tool, it becomes part of the agent's active tool set. The Letta backend surfaces this as `tool_rules` on the agent. You can view the current tool rules on the **Summary** tab of the Persistent State panel or in the JSON block on the **Model** tab of the Inspector panel.
+
+Detaching a tool removes it from the tool set for future turns. Conversation history that references past tool calls is not affected.

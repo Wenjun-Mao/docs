@@ -1,0 +1,88 @@
+---
+title: "Prompt & Persona Lab: edit agent behavior"
+description: "The Prompt & Persona Lab lets you view, compare, and apply system prompts and personas to your agents with a visual revision timeline."
+---
+
+The Prompt & Persona Lab was a standalone module in earlier versions of Letta Open ADE. It is now consolidated into Agent Studio. Navigating to `/prompt-persona-lab` redirects you automatically to the **Prompt** tab of the Agent Studio inspector. All prompt and persona functionality described below lives there.
+
+<Note>
+  If you have bookmarks or scripts pointing to `/prompt-persona-lab`, update them to `/agent-studio?focus=prompt`. The old route redirects automatically, but the redirect is client-side and may not work in non-browser contexts.
+</Note>
+
+## What this module does
+
+The Prompt tab in the Agent Studio inspector gives you a focused view of the three editable text fields that shape how an agent behaves:
+
+- **System prompt** — the base instruction set sent at the start of every context window
+- **Persona** — the `persona` core-memory block describing the agent's character
+- **Human** — the `human` core-memory block containing what the agent knows about the user
+
+Changes to any of these fields are persisted to the Letta backend and recorded in the revision timeline.
+
+## Available prompt keys
+
+When creating an agent you choose a prompt key that determines which system prompt template is applied.
+
+| Key | Label | Description |
+|---|---|---|
+| `custom_v2` | Custom V2 Chat (Default) | Recommended baseline for robust persona adherence and tool-flow behavior. |
+| `custom_v1` | Custom V1 (Alternate) | Alternate baseline kept for A/B testing and regression comparison. |
+
+The default prompt key is `custom_v2`. You set the prompt key at agent creation time; it is not editable afterward through the UI, but you can overwrite the system prompt text directly using **Edit System Prompt**.
+
+## Persona catalog
+
+Agents are initialized with the `linxiaotang` persona. This is currently the only persona defined in the platform. The persona value is stored in the `persona` core-memory block and can be edited at any time from the Prompt tab or the Memory tab.
+
+## Editing prompts and personas
+
+<Steps>
+  <Step title="Open the Prompt tab">
+    In Agent Studio, select the agent you want to modify. In the Inspector panel on the left, click the **Prompt** tab.
+  </Step>
+  <Step title="Choose the field to edit">
+    Click one of the three action buttons:
+
+    - **Edit System Prompt** — opens an inline editor pre-filled with the current system prompt
+    - **Edit Persona** — opens an inline editor pre-filled with the current `persona` block value
+    - **Edit Human** — opens an inline editor pre-filled with the current `human` block value
+  </Step>
+  <Step title="Make your changes">
+    Modify the text in the editor. The editor supports multi-line free text. The field cannot be saved if left empty.
+  </Step>
+  <Step title="Save">
+    Click **Save**. The change is written to the Letta backend and a new revision record is appended to the timeline. Click **Cancel** to discard the change.
+  </Step>
+</Steps>
+
+<Warning>
+  Saving a system prompt or memory block update takes effect on the next turn the agent processes. Existing in-progress turns are not affected.
+</Warning>
+
+## Revision history timeline
+
+Every time you save a system prompt, persona, or human block change, the platform appends a record to `diagnostics/prompt_persona_revisions.jsonl` on the backend host. The Prompt tab fetches these records and displays them in the **Revision Timeline** panel.
+
+Each revision record includes:
+
+| Field | Description |
+|---|---|
+| Field name | `system`, `persona`, or `human` |
+| Timestamp | UTC time the revision was recorded |
+| Source | The API endpoint that wrote the change |
+| Character delta | Positive or negative character count change |
+| Before/after preview | Expandable snippet showing the first non-empty line of the previous and new values |
+
+### Filtering revisions
+
+The timeline loads the most recent 120 records for the selected agent. To filter by field type, use the revision API directly:
+
+```http
+GET /api/v1/platform/metadata/prompts-personas/revisions?agent_id=<id>&field=system
+```
+
+Valid values for `field` are `system`, `persona`, and `human`.
+
+### Refreshing the timeline
+
+Click **Refresh Timeline** to reload revision records from the backend without performing a full agent refresh. This is useful when you want to verify that a save was recorded without navigating away.

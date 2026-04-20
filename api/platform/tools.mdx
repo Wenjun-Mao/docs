@@ -1,0 +1,312 @@
+---
+title: "Manage and probe agent tools via the Platform API"
+description: "List, attach, detach, and probe tools on Letta agents using the Platform API. Validate tool-call behavior with the test-invoke endpoint."
+---
+
+The Platform API gives you full lifecycle control over the tools available to your Letta agents. You can discover all tools registered on the connected Letta server, attach or detach them from a specific agent, and validate tool-call behavior by sending a test message and inspecting what the agent invoked.
+
+---
+
+## List tools
+
+```
+GET /api/v1/platform/tools
+```
+
+Returns all tools registered on the Letta server. Pass an `agent_id` to annotate each tool with whether it is currently attached to that agent.
+
+### Query parameters
+
+<ParamField query="search" type="string">
+  Filter tools by name. Partial matches are supported.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of tools to return. Capped at 500.
+</ParamField>
+
+<ParamField query="agent_id" type="string">
+  When provided, each tool in the response includes an `attached_to_agent` flag indicating whether the tool is currently attached to this agent.
+</ParamField>
+
+### Response
+
+<ResponseField name="total" type="integer">
+  Number of tools returned.
+</ResponseField>
+
+<ResponseField name="search" type="string">
+  The search string that was applied, or an empty string if none.
+</ResponseField>
+
+<ResponseField name="limit" type="integer">
+  The effective limit applied to the query.
+</ResponseField>
+
+<ResponseField name="agent_id" type="string or null">
+  The agent ID used for attachment annotation, or `null` if none was provided.
+</ResponseField>
+
+<ResponseField name="items" type="object[]">
+  List of tool records.
+
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Unique tool identifier.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Tool name as registered in Letta.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Description of what the tool does.
+    </ResponseField>
+    <ResponseField name="tool_type" type="string">
+      The type classification of the tool.
+    </ResponseField>
+    <ResponseField name="source_type" type="string">
+      How the tool was sourced (e.g. `python`).
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of when the tool was created.
+    </ResponseField>
+    <ResponseField name="last_updated_at" type="string">
+      ISO 8601 timestamp of the most recent update.
+    </ResponseField>
+    <ResponseField name="tags" type="string[]">
+      Tags associated with this tool.
+    </ResponseField>
+    <ResponseField name="attached_to_agent" type="boolean or null">
+      Whether this tool is currently attached to the requested agent. `null` when no `agent_id` query parameter was provided.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash curl
+curl "http://127.0.0.1:8284/api/v1/platform/tools?agent_id=agent-abc123&limit=50"
+```
+
+</CodeGroup>
+
+---
+
+## Attach a tool to an agent
+
+```
+PATCH /api/v1/platform/agents/{agent_id}/tools/attach/{tool_id}
+```
+
+Attaches the specified tool to the agent. If the tool is already attached, the call succeeds and `tool_was_attached` is `false`.
+
+### Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The ID of the agent to attach the tool to.
+</ParamField>
+
+<ParamField path="tool_id" type="string" required>
+  The ID of the tool to attach.
+</ParamField>
+
+### Response
+
+<ResponseField name="agent_id" type="string">
+  The ID of the agent.
+</ResponseField>
+
+<ResponseField name="tool_id" type="string">
+  The ID of the tool.
+</ResponseField>
+
+<ResponseField name="tool_was_attached" type="boolean">
+  Whether the tool was already attached before this call.
+</ResponseField>
+
+<ResponseField name="tool_is_attached" type="boolean">
+  Whether the tool is attached after this call. Always `true` on success.
+</ResponseField>
+
+<ResponseField name="tool_count_before" type="integer">
+  Number of tools attached to the agent before this operation.
+</ResponseField>
+
+<ResponseField name="tool_count_after" type="integer">
+  Number of tools attached to the agent after this operation.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash curl
+curl -X PATCH \
+  http://127.0.0.1:8284/api/v1/platform/agents/agent-abc123/tools/attach/tool-xyz789
+```
+
+</CodeGroup>
+
+```json response
+{
+  "agent_id": "agent-abc123",
+  "tool_id": "tool-xyz789",
+  "tool_was_attached": false,
+  "tool_is_attached": true,
+  "tool_count_before": 3,
+  "tool_count_after": 4
+}
+```
+
+---
+
+## Detach a tool from an agent
+
+```
+PATCH /api/v1/platform/agents/{agent_id}/tools/detach/{tool_id}
+```
+
+Detaches the specified tool from the agent. If the tool is not currently attached, the call succeeds and `tool_was_attached` is `false`.
+
+### Path parameters
+
+<ParamField path="agent_id" type="string" required>
+  The ID of the agent to detach the tool from.
+</ParamField>
+
+<ParamField path="tool_id" type="string" required>
+  The ID of the tool to detach.
+</ParamField>
+
+### Response
+
+The response shape is identical to the attach endpoint.
+
+<ResponseField name="agent_id" type="string">
+  The ID of the agent.
+</ResponseField>
+
+<ResponseField name="tool_id" type="string">
+  The ID of the tool.
+</ResponseField>
+
+<ResponseField name="tool_was_attached" type="boolean">
+  Whether the tool was attached before this call.
+</ResponseField>
+
+<ResponseField name="tool_is_attached" type="boolean">
+  Whether the tool is still attached after this call. Always `false` on success.
+</ResponseField>
+
+<ResponseField name="tool_count_before" type="integer">
+  Number of tools attached to the agent before this operation.
+</ResponseField>
+
+<ResponseField name="tool_count_after" type="integer">
+  Number of tools attached to the agent after this operation.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash curl
+curl -X PATCH \
+  http://127.0.0.1:8284/api/v1/platform/agents/agent-abc123/tools/detach/tool-xyz789
+```
+
+</CodeGroup>
+
+---
+
+## Test-invoke a tool
+
+```
+POST /api/v1/platform/tools/test-invoke
+```
+
+Sends a message to an agent and returns a structured analysis of which tools were called and whether they matched your expectation. Use this to validate tool-call behavior without inspecting raw conversation history.
+
+### Request body
+
+<ParamField body="agent_id" type="string" required>
+  The ID of the agent to send the test message to.
+</ParamField>
+
+<ParamField body="input" type="string" required>
+  The message text to send to the agent.
+</ParamField>
+
+<ParamField body="expected_tool_name" type="string">
+  If provided, the response includes `expected_tool_matched` indicating whether a tool call with this exact name appeared in the agent's response sequence.
+</ParamField>
+
+<ParamField body="override_model" type="string">
+  Optional model handle to use for this message only, overriding the agent's persisted default.
+</ParamField>
+
+<ParamField body="override_system" type="string">
+  Optional system prompt to use for this message only, overriding the agent's persisted system.
+</ParamField>
+
+### Response
+
+<ResponseField name="agent_id" type="string">
+  The agent ID that received the message.
+</ResponseField>
+
+<ResponseField name="input" type="string">
+  The input message that was sent.
+</ResponseField>
+
+<ResponseField name="expected_tool_name" type="string or null">
+  The tool name you expected to be called, or `null` if none was specified.
+</ResponseField>
+
+<ResponseField name="expected_tool_matched" type="boolean or null">
+  Whether a tool call matching `expected_tool_name` appeared in the response. `null` when no `expected_tool_name` was provided.
+</ResponseField>
+
+<ResponseField name="tool_call_count" type="integer">
+  Total number of tool call steps in the agent's response sequence.
+</ResponseField>
+
+<ResponseField name="tool_return_count" type="integer">
+  Total number of tool return steps in the agent's response sequence.
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  The full structured result from the agent runtime message, including the complete response sequence.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash curl
+curl -X POST http://127.0.0.1:8284/api/v1/platform/tools/test-invoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agent-abc123",
+    "input": "What is the weather in Shanghai today?",
+    "expected_tool_name": "get_weather"
+  }'
+```
+
+</CodeGroup>
+
+```json response
+{
+  "agent_id": "agent-abc123",
+  "input": "What is the weather in Shanghai today?",
+  "expected_tool_name": "get_weather",
+  "expected_tool_matched": true,
+  "tool_call_count": 1,
+  "tool_return_count": 1,
+  "result": {
+    "total_steps": 4,
+    "sequence": []
+  }
+}
+```
